@@ -246,12 +246,14 @@ void diag_flux(double (** F1)[NPR], double (** F2)[NPR])
 	int j ;
 
         mdot = edot = ldot = 0. ;
-        for(j=0;j<N2;j++) {
+        if(RowRank == 0) {
+            for(j=0;j<N2;j++) {
                 mdot += F1[0][j][RHO]*2.*M_PI*dx[2] ;
                 edot -= (F1[0][j][UU] - F1[0][j][RHO])*2.*M_PI*dx[2] ;
                 ldot += F1[0][j][U3] *2.*M_PI*dx[2] ;
+            }
+            // MPI Reduce mdot, edot, ldot : sum (To zero, only used for print above)
+            // Only in CommRow
         }
-
-        // MPI Reduce mdot, edot, ldot : sum (To zero, only used for print above)
 }
 

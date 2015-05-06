@@ -232,6 +232,7 @@ void init()
     // Globally maximize rhomax, umax
     double lmax[2], gmax[2];
     lmax[0] = rhomax; lmax[1] = umax;
+   
     MPI_Allreduce(lmax, gmax, 2, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     rhomax = gmax[0]; umax = gmax[1];
 
@@ -244,10 +245,10 @@ void init()
     }
     umax /= rhomax ;
     rhomax = 1. ;
+
+    // MPI Halo exchange p [ deferred as fixup does that for us! ]
     fixup(p) ;
     bound_prim(p);
-
-    // MPI Halo Exchange: p, 2
 
     /* first find corner-centered vector potential */
     ZSLOOP(0,N1,0,N2) A[i][j] = 0. ;

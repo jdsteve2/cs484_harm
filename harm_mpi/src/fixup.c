@@ -47,7 +47,8 @@
 #define FLOOP for(k=0;k<B1;k++)
 
 /* apply floors to density, internal energy */
-
+// Note: Does not need Halo consistency
+// Output will have Halo consistency!
 void fixup(double (** pv)[NPR]) 
 {
   int i,j ;
@@ -55,6 +56,8 @@ void fixup(double (** pv)[NPR])
   ZLOOP {
     fixup1zone( i, j, pv[i][j] );
   }
+
+  // MPI Halo exchange: pv, pflag, 2
 
 }
 
@@ -150,7 +153,8 @@ void fixup1zone( int i, int j, double pv[NPR] )
                       7  6  5
 
  *******************************************************************************************/
-
+// Note: Requires halo consistency
+// Retains Halo consistency
 void fixup_utoprim( double (** pv)[NPR] )  
 {
   int i, j, k;
@@ -159,6 +163,8 @@ void fixup_utoprim( double (** pv)[NPR] )
   /* Flip the logic of the pflag[] so that it now indicates which cells are good  */
   ZSLOOP(-2,(N1+1),-2,(N2+1)) { pflag[i][j] = !pflag[i][j] ; } 
 
+  // MPI TODO this loop performs in order.. maybe need some synchronization
+  // Also don't understand the logic of pflag anymore.. its been flipped but i dunno whats going on
   /* Fix the interior points first */
   ZSLOOP(0,(N1-1),0,(N2-1)) { 
     if( pflag[i][j] == 0 ) { 
@@ -251,8 +257,9 @@ void set_Katm( void )
             fprintf(stdout,"Katm[%d] = %26.20e \n", i, Katm[i] );
             fflush(stdout);
         }
-
     }
+
+    // MPI Broadcast Katm across the row for each process on CommRow
 
   return;
 }

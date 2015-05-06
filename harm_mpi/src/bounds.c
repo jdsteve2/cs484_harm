@@ -46,7 +46,8 @@
 #include "decs.h"
 
 /* bound array containing entire set of primitive variables */
-
+// Note: Needs initial Halo consistency
+// Output: Will retain Halo consistency
 void bound_prim( double (** prim)[NPR] )
 {
         int i,j,k ;

@@ -117,6 +117,7 @@ void gcov_func(double *X, double gcov[][NDIM])
 }
 
 /* some grid location, dxs */
+// Note: Modified for MPI
 void set_points()
 {
         startx[1] = log(Rin - R0) ;
@@ -125,10 +126,11 @@ void set_points()
         dx[2] = 1./GlobalN2 ;
 }
 
+// Note: Assumes Halo of F1 and F2 are consistent
 void fix_flux(double (** F1)[NPR], double (** F2)[NPR])
 {
 	int i,j,k ;
-
+/*
 	for(i=-1;i<N1;i++) {
 
 		F1[i][-1][B2] = -F1[i][0][B2] ;
@@ -137,11 +139,95 @@ void fix_flux(double (** F1)[NPR], double (** F2)[NPR])
 		PLOOP F2[i][N2][k] = 0. ;
 		PLOOP F2[i][0][k] = 0. ;
 	}
+*/
+    // Fix left border
+    if(ColRank == 0) {
+        for(i=-1;i<N1;i++) {
 
+            F1[i][-1][B2] = -F1[i][0][B2] ;
+            PLOOP F2[i][0][k] = 0. ;
+        }
+
+        if(RowRank > 0) {
+            // fix top to avoid halo exchange
+            F1[-2][-1][B2] = -F1[-2][0][B2] ;
+            PLOOP F2[-2][0][k] = 0. ;
+        }
+        if(RowRank < (NumRows - 1)) {
+            // fix bottom to avoid halo exchange
+            F1[N1][-1][B2] = -F1[N1][0][B2] ;
+            F1[N1+1][-1][B2] = -F1[N1+1][0][B2] ;
+            PLOOP {
+                F2[N1][0][k] = 0. ;
+                F2[N1+1][0][k] = 0. ;
+            }
+        }
+    }
+    // Fix right border
+    if(ColRank == (NumCols - 1)) {
+        for(i=-1;i<N1;i++) {
+
+            F1[i][N2][B2] = -F1[i][N2-1][B2] ;
+            PLOOP F2[i][N2][k] = 0. ;
+        }
+
+        if(RowRank > 0) {
+            // fix top to avoid halo exchange
+            F1[-2][N2][B2] = -F1[-2][N2-1][B2] ;
+            PLOOP F2[-2][N2][k] = 0. ;
+        }
+        if(RowRank < (NumRows - 1)) {
+            // fix bottom to avoid halo exchange
+            F1[N1][N2][B2] = -F1[N1][N2-1][B2] ;
+            F1[N1+1][N2][B2] = -F1[N1+1][N2-1][B2] ;
+            PLOOP {
+                F2[N1][N2][k] = 0. ;
+                F2[N1+1][N2][k] = 0. ;
+            }
+        }
+    }
+
+    // MPI Halo exchange: Fixed so there is no need for it
+/*	
 	for(j=-1;j<N2;j++) {
 	  if(F1[0 ][j][RHO]>0) F1[0 ][j][RHO]=0;
 	  if(F1[N1][j][RHO]<0) F1[N1][j][RHO]=0;
 	}
+*/
+    // fix top border
+    if(RowRank == 0) {
+        for(j=-1;j<N2;j++) {
+            if(F1[0 ][j][RHO]>0) F1[0 ][j][RHO]=0;
+        }
+
+        if(ColRank > 0) {
+            // fix left to avoid halo exchange
+            if(F1[0 ][-2][RHO]>0) F1[0 ][-2][RHO]=0;
+        }
+        if(ColRank < (NumCols - 1)) {
+            // fix right to avoid halo exchange
+            if(F1[0 ][N2][RHO]>0) F1[0 ][N2][RHO]=0;
+            if(F1[0 ][N2+1][RHO]>0) F1[0 ][N2+1][RHO]=0;
+        }
+    }
+    // fix bottom border
+    if(RowRank == (NumRows - 1)) {
+        for(j=-1;j<N2;j++) {
+            if(F1[N1][j][RHO]>0) F1[N1][j][RHO]=0;
+        }
+
+        if(ColRank > 0) {
+            // fix left to avoid halo exchange
+            if(F1[N1][-2][RHO]>0) F1[N1][-2][RHO]=0;
+        }
+        if(ColRank < (NumCols - 1)) {
+            // fix right to avoid halo exchange
+            if(F1[N1][N2][RHO]>0) F1[N1][N2][RHO]=0;
+            if(F1[N1][N2+1][RHO]>0) F1[N1][N2+1][RHO]=0;
+        }
+    }
+    
+    // MPI Halo exchange: Fixed so there is no need for it
 
 	return;
 }

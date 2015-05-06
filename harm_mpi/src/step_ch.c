@@ -80,43 +80,46 @@ void   flux_cd(double (** F1)[NPR], double (** F2)[NPR]) ;
 ***********************************************************************************************/
 void step_ch()
 {
-	double ndt ;
-	int i,j,k ;
+    double ndt ;
+    int i,j,k ;
 
-	fprintf(stderr,"h") ;
-	ndt = advance(p, p, 0.5*dt, ph) ;   /* time step primitive variables to the half step */
+    if(WorldRank == 0)
+        fprintf(stderr,"h") ;
+    ndt = advance(p, p, 0.5*dt, ph) ;   /* time step primitive variables to the half step */
 
-	fixup(ph) ;         /* Set updated densities to floor, set limit for gamma */
-	bound_prim(ph) ;    /* Set boundary conditions for primitive variables, flag bad ghost zones */
-	fixup_utoprim(ph);  /* Fix the failure points using interpolation and updated ghost zone values */
-	bound_prim(ph) ;    /* Reset boundary conditions with fixed up points */
+    fixup(ph) ;         /* Set updated densities to floor, set limit for gamma */
+    bound_prim(ph) ;    /* Set boundary conditions for primitive variables, flag bad ghost zones */
+    fixup_utoprim(ph);  /* Fix the failure points using interpolation and updated ghost zone values */
+    bound_prim(ph) ;    /* Reset boundary conditions with fixed up points */
 
-	/* Repeat and rinse for the full time (aka corrector) step:  */
-	fprintf(stderr,"f") ;
-	ZLOOP PLOOP psave[i][j][k] = p[i][j][k] ;
-	ndt = advance(p, ph, dt,    p) ;
+    /* Repeat and rinse for the full time (aka corrector) step:  */
+    if(WorldRank == 0)
+        fprintf(stderr,"f") ;
+    ZLOOP PLOOP psave[i][j][k] = p[i][j][k] ;
+    
+    ndt = advance(p, ph, dt,    p) ;
+    fixup(p) ;
+    bound_prim(p) ;
+    fixup_utoprim(p);
+    bound_prim(p) ;
 
-	fixup(p) ;
-        bound_prim(p) ;
-	fixup_utoprim(p);
-	bound_prim(p) ;
 
+    /* Determine next time increment based on current characteristic speeds: */
+    if(dt < 1.e-9) {
+        if(WorldRank == 0)
+            fprintf(stderr,"timestep too small\n") ;
+        exit(11) ;
+    }
 
-	/* Determine next time increment based on current characteristic speeds: */
-        if(dt < 1.e-9) {
-                fprintf(stderr,"timestep too small\n") ;
-                exit(11) ;
-        }
+    /* increment time */
+    t += dt ;
 
-        /* increment time */
-        t += dt ;
+    /* set next timestep */
+    if(ndt > SAFE*dt) ndt = SAFE*dt ;
+    dt = ndt ;
+    if(t + dt > tf) dt = tf - t ;  /* but don't step beyond end of run */
 
-        /* set next timestep */
-        if(ndt > SAFE*dt) ndt = SAFE*dt ;
-        dt = ndt ;
-        if(t + dt > tf) dt = tf - t ;  /* but don't step beyond end of run */
-
-        /* done! */
+    /* done! */
 }
 
 /***********************************************************************************************/
@@ -131,71 +134,80 @@ void step_ch()
 
 ***********************************************************************************************/
 double advance(
-	double (** pi)[NPR], 
-	double (** pb)[NPR], 
-	double Dt,
-	double (** pf)[NPR]
-	)
+        double (** pi)[NPR], 
+        double (** pb)[NPR], 
+        double Dt,
+        double (** pf)[NPR]
+        )
 {
-  int i,j,k;
-  double ndt,ndt1,ndt2,U[NPR],dU[NPR] ;
-  struct of_geom geom ;
-  struct of_state q ;
-  
-  double Uo[NPR],po[NPR] ;
-  
-  ZLOOP PLOOP pf[i][j][k] = pi[i][j][k] ;        /* needed for Utoprim */
-  
-  fprintf(stderr,"0") ;
-  ndt1 = fluxcalc(pb, F1, 1) ;
-  ndt2 = fluxcalc(pb, F2, 2) ;
+    int i,j,k;
+    double ndt,ndt1,ndt2,U[NPR],dU[NPR] ;
+    struct of_geom geom ;
+    struct of_state q ;
 
-  fix_flux(F1,F2) ;
+    double Uo[NPR],po[NPR] ;
 
-  flux_ct(F1,F2) ;
+    ZLOOP PLOOP pf[i][j][k] = pi[i][j][k] ;        /* needed for Utoprim */
 
-  /* evaluate diagnostics based on fluxes */
-  diag_flux(F1,F2) ;
+    if(WorldRank == 0)
+        fprintf(stderr,"0") ;
 
-  fprintf(stderr,"1") ;
-  /** now update pi to pf **/
-  ZLOOP {
+    ndt1 = fluxcalc(pb, F1, 1) ;
+    ndt2 = fluxcalc(pb, F2, 2) ;
 
-    get_geometry(i,j,CENT,&geom) ;
+    fix_flux(F1,F2) ;
 
-    source(pb[i][j],&geom,i,j,dU,Dt) ;
+    flux_ct(F1,F2) ;
 
-    get_state(pi[i][j],&geom,&q) ;
-    primtoU(pi[i][j],&q,&geom,U) ;
+    /* evaluate diagnostics based on fluxes */
+    diag_flux(F1,F2) ;
 
-    PLOOP {
-      U[k] += Dt*(
-		  - (F1[i+1][j][k] - F1[i][j][k])/dx[1]
-		  - (F2[i][j+1][k] - F2[i][j][k])/dx[2]
-		  + dU[k]
-		  ) ;
-    }
+    if(WorldRank == 0)
+        fprintf(stderr,"1") ;
 
-    pflag[i][j] = Utoprim_2d(U, geom.gcov, geom.gcon, geom.g, pf[i][j]);
-    if( pflag[i][j] ) failimage[0][i+j*N1]++ ;
+    /** now update pi to pf **/
+    ZLOOP {
+
+        get_geometry(i,j,CENT,&geom) ;
+
+        source(pb[i][j],&geom,i,j,dU,Dt) ;
+
+        get_state(pi[i][j],&geom,&q) ;
+        primtoU(pi[i][j],&q,&geom,U) ;
+
+        PLOOP {
+            U[k] += Dt*(
+                    - (F1[i+1][j][k] - F1[i][j][k])/dx[1]
+                    - (F2[i][j+1][k] - F2[i][j][k])/dx[2]
+                    + dU[k]
+                    ) ;
+        }
+
+        pflag[i][j] = Utoprim_2d(U, geom.gcov, geom.gcon, geom.g, pf[i][j]);
+        if( pflag[i][j] ) failimage[0][i+j*N1]++ ;
 
 #if( DO_FONT_FIX ) 
-    if( pflag[i][j] ) { 
-      pflag[i][j] = Utoprim_1dvsq2fix1(U, geom.gcov, geom.gcon, geom.g, pf[i][j], Katm[i] );
-      if( pflag[i][j] ) { 
-	failimage[1][i+j*N1]++ ;
-	pflag[i][j] = Utoprim_1dfix1(U, geom.gcov, geom.gcon, geom.g, pf[i][j], Katm[i] );
-	if( pflag[i][j] ) failimage[2][i+j*N1]++ ;
-      }
-    }
+        if( pflag[i][j] ) { 
+            pflag[i][j] = Utoprim_1dvsq2fix1(U, geom.gcov, geom.gcon, geom.g, pf[i][j], Katm[i] );
+            if( pflag[i][j] ) { 
+                failimage[1][i+j*N1]++ ;
+                pflag[i][j] = Utoprim_1dfix1(U, geom.gcov, geom.gcon, geom.g, pf[i][j], Katm[i] );
+                if( pflag[i][j] ) failimage[2][i+j*N1]++ ;
+            }
+        }
 #endif
-		
-  }
 
-  ndt = defcon * 1./(1./ndt1 + 1./ndt2) ;
-  fprintf(stderr,"2") ;
+    }
 
-  return(ndt) ;
+    // MPI Halo exchange: pf, pflag
+    // Deferred as fixup called next does it for us
+
+    ndt = defcon * 1./(1./ndt1 + 1./ndt2) ;
+    
+    if(WorldRank == 0)
+        fprintf(stderr,"2") ;
+
+    return(ndt) ;
 }
 
 
@@ -209,114 +221,128 @@ double advance(
      -- only has HLL and Lax-Friedrichs  approximate Riemann solvers implemented;
         
 ***********************************************************************************************/
+// Note: pr is scaled and back if (RESCALE) is set. No need for Halo exchange if already updated
+// F needs Halo exchange at the end
+// dq is modified intermediately
 double fluxcalc(
-	double (** pr)[NPR], 
-	double (** F)[NPR], 
-	int dir 
-	)
+        double (** pr)[NPR], 
+        double (** F)[NPR], 
+        int dir 
+        )
 {
-	int i,j,k,idel,jdel,face ;
-	double p_l[NPR],p_r[NPR],F_l[NPR],F_r[NPR],U_l[NPR],U_r[NPR] ;
-	double cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ndt,dtij ;
-	double ctop ;
-	struct of_geom geom ;
-	struct of_state state_l,state_r ;
-	void rescale(double *pr, int which, int dir, int ii, int jj, int face, struct of_geom *geom) ;
-	double bsq ;
+    int i,j,k,idel,jdel,face ;
+    double p_l[NPR],p_r[NPR],F_l[NPR],F_r[NPR],U_l[NPR],U_r[NPR] ;
+    double cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ndt,dtij ;
+    double ctop ;
+    struct of_geom geom ;
+    struct of_state state_l,state_r ;
+    void rescale(double *pr, int which, int dir, int ii, int jj, int face, struct of_geom *geom) ;
+    double bsq ;
 
-        if     (dir == 1) {idel = 1; jdel = 0; face = FACE1;}
-	else if(dir == 2) {idel = 0; jdel = 1; face = FACE2;}
-	else { exit(10); }
-
-#if(RESCALE)
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	ZSLOOP(-2,N1+1,-2,N2+1) {
-		get_geometry(i,j,CENT,&geom) ;
-		rescale(pr[i][j],FORWARD, dir, i,j,CENT,&geom) ;
-	}
-#endif
-	/* then evaluate slopes */
-	ZSLOOP(-1,N1,-1,N2) PLOOP {
-   	        //-new get_geometry(i,j,CENT,&geom) ;
-		//-new bsq = bsq_calc(pr[i][j],&geom) ;
-		//-new if(bsq/pr[i][j][RHO] > 10. ||
-		//-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
-		//-new else lim = MC ;
-
-		dq[i][j][k] = slope_lim(
-				pr[i-idel][j-jdel][k],
-				pr[i][j][k],
-				pr[i+idel][j+jdel][k]
-				) ;
-	}
-
-	ndt = 1.e9 ;
-        ZSLOOP(-jdel,N1,-idel,N2) {
-
-                /* this avoids problems on the pole */
-                if(dir == 2 && (j == 0 || j == N2)) {
-                        PLOOP F[i][j][k] = 0. ;
-                }
-		else {
-
-                PLOOP {
-                        p_l[k] = pr[i-idel][j-jdel][k] 
-					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        p_r[k] = pr[i][j][k]   
-					- 0.5*dq[i][j][k] ;
-                }
-
-		get_geometry(i,j,face,&geom) ;
+    if     (dir == 1) {idel = 1; jdel = 0; face = FACE1;}
+    else if(dir == 2) {idel = 0; jdel = 1; face = FACE2;}
+    else { exit(10); }
 
 #if(RESCALE)
-		rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
-		rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
+    /** evaluate slopes of primitive variables **/
+    /* first rescale */
+    ZSLOOP(-2,N1+1,-2,N2+1) {
+        get_geometry(i,j,CENT,&geom) ;
+        rescale(pr[i][j],FORWARD, dir, i,j,CENT,&geom) ;
+    }
+    // MPI Halo Exchange: pr, 2
+    // Assuming pr was initially correct, no need for Halo exchange
 #endif
-		get_state(p_l,&geom,&state_l) ;
-		get_state(p_r,&geom,&state_r) ;
-		
-		primtoflux(p_l,&state_l,dir,&geom,F_l) ;
-		primtoflux(p_r,&state_r,dir,&geom,F_r) ;
+    /* then evaluate slopes */
+    // TODO: Only evaluate ZLOOP and add extra for bounding box, perhaps
+    ZSLOOP(-1,N1,-1,N2) PLOOP {
+        //-new get_geometry(i,j,CENT,&geom) ;
+        //-new bsq = bsq_calc(pr[i][j],&geom) ;
+        //-new if(bsq/pr[i][j][RHO] > 10. ||
+        //-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
+        //-new else lim = MC ;
 
-		primtoflux(p_l,&state_l,TT, &geom,U_l) ;
-		primtoflux(p_r,&state_r,TT, &geom,U_r) ;
+        dq[i][j][k] = slope_lim(
+                pr[i-idel][j-jdel][k],
+                pr[i][j][k],
+                pr[i+idel][j+jdel][k]
+                ) ;
+    }
 
-		vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
-		vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
+    // MPI Halo Exchange dq, 1 (or 2 if above TODO is done)
+    // since pr is correct, one layer is correctly computed need to exchange second layer
+    // No need if below loop is corrected to only do relevant blocks TODO (only one of the two)
 
-		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
-		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
-		ctop = MY_MAX(cmax,cmin) ;
+    ndt = 1.e9 ;
+    ZSLOOP(-jdel,N1,-idel,N2) {
 
+        /* this avoids problems on the pole */
+        if(dir == 2 && (((j == 0) && (ColRank == 0)) || ((j == N2) && (ColRank == (NumCols-1))))) {
+            PLOOP F[i][j][k] = 0. ;
+        }
+        else {
 
-		PLOOP F[i][j][k] = 
-			HLLF*(
-			(cmax*F_l[k] + cmin*F_r[k] 
-				- cmax*cmin*(U_r[k] - U_l[k]))/
-					(cmax + cmin + SMALL) 
-			) +
-			LAXF*(
-			0.5*(F_l[k] + F_r[k] 
-				- ctop*(U_r[k] - U_l[k])) 
-			) ;
+            PLOOP {
+                p_l[k] = pr[i-idel][j-jdel][k] 
+                    + 0.5*dq[i-idel][j-jdel][k] ;
+                p_r[k] = pr[i][j][k]   
+                    - 0.5*dq[i][j][k] ;
+            }
 
-                /* evaluate restriction on timestep */
-                cmax = MY_MAX(cmax,cmin) ;
-                dtij = cour*dx[dir]/cmax ;
-		if(dtij < ndt) ndt = dtij ;
-
-		}
-	}
+            get_geometry(i,j,face,&geom) ;
 
 #if(RESCALE)
-	ZSLOOP(-2,N1+1,-2,N2+1) {
-		get_geometry(i,j,CENT,&geom) ;
-		rescale(pr[i][j],REVERSE,dir,i,j,CENT,&geom) ;
-	}
+            rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
+            rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
+#endif
+            get_state(p_l,&geom,&state_l) ;
+            get_state(p_r,&geom,&state_r) ;
+
+            primtoflux(p_l,&state_l,dir,&geom,F_l) ;
+            primtoflux(p_r,&state_r,dir,&geom,F_r) ;
+
+            primtoflux(p_l,&state_l,TT, &geom,U_l) ;
+            primtoflux(p_r,&state_r,TT, &geom,U_r) ;
+
+            vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
+            vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
+
+            cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
+            cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
+            ctop = MY_MAX(cmax,cmin) ;
+
+
+            PLOOP F[i][j][k] = 
+                HLLF*(
+                        (cmax*F_l[k] + cmin*F_r[k] 
+                         - cmax*cmin*(U_r[k] - U_l[k]))/
+                        (cmax + cmin + SMALL) 
+                     ) +
+                LAXF*(
+                        0.5*(F_l[k] + F_r[k] 
+                            - ctop*(U_r[k] - U_l[k])) 
+                     ) ;
+
+            /* evaluate restriction on timestep */
+            cmax = MY_MAX(cmax,cmin) ;
+            dtij = cour*dx[dir]/cmax ;
+            if(dtij < ndt) ndt = dtij ;
+
+        }
+    }
+
+    // MPI Halo exchange: F, 2 [NEEDED]
+
+    // MPI Allreduce: ndt, min
+
+#if(RESCALE)
+    ZSLOOP(-2,N1+1,-2,N2+1) {
+        get_geometry(i,j,CENT,&geom) ;
+        rescale(pr[i][j],REVERSE,dir,i,j,CENT,&geom) ;
+    }
 #endif
 
-	return(ndt) ;
+    return(ndt) ;
 
 }
 
@@ -330,24 +356,27 @@ double fluxcalc(
 ***********************************************************************************************/
 void flux_ct(double (** F1)[NPR], double (** F2)[NPR])
 {
-	int i,j ;
-	//static double emf[N1+1][N2+1] ;
+    int i,j ;
 
-	/* calculate EMFs */
-	/* Toth approach: just average */
-	ZSLOOP(0,N1,0,N2) emf[i][j] = 0.25*(F1[i][j][B2] + F1[i][j-1][B2]
-					  - F2[i][j][B1] - F2[i-1][j][B1]) ;
+    /* calculate EMFs */
+    /* Toth approach: just average */
+    ZSLOOP(0,N1,0,N2) emf[i][j] = 0.25*(F1[i][j][B2] + F1[i][j-1][B2]
+            - F2[i][j][B1] - F2[i-1][j][B1]) ;
 
-	/* rewrite EMFs as fluxes, after Toth */
-        ZSLOOP(0,N1,0,N2-1) {
-                F1[i][j][B1] = 0. ;
-                F1[i][j][B2] =  0.5*(emf[i][j] + emf[i][j+1]) ;
-        }
-        ZSLOOP(0,N1-1,0,N2) {
-                F2[i][j][B1] = -0.5*(emf[i][j] + emf[i+1][j]) ;
-                F2[i][j][B2] = 0. ;
-	}
+    // MPI Halo exchange: emf, 1
+    // No need as we are recomputing the exact same values
 
+    /* rewrite EMFs as fluxes, after Toth */
+    ZSLOOP(0,N1,0,N2-1) {
+        F1[i][j][B1] = 0. ;
+        F1[i][j][B2] =  0.5*(emf[i][j] + emf[i][j+1]) ;
+    }
+    ZSLOOP(0,N1-1,0,N2) {
+        F2[i][j][B1] = -0.5*(emf[i][j] + emf[i+1][j]) ;
+        F2[i][j][B2] = 0. ;
+    }
+
+    // MPI Halo exchange: F1 and F2, 2 [NEEDED]
 }
 
 
