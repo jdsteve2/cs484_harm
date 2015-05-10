@@ -147,7 +147,10 @@ double advance(
   struct of_state q ;
   
   double Uo[NPR],po[NPR] ;
-  
+
+  #pragma omp parallel for \
+    default(shared) \
+    private(i,j,k)
   ZLOOP PLOOP pf[i][j][k] = pi[i][j][k] ;        /* needed for Utoprim */
   
   fprintf(stderr,"0") ;
@@ -159,11 +162,15 @@ double advance(
   flux_ct(F1,F2) ;
 
   /* evaluate diagnostics based on fluxes */
-  diag_flux(F1,F2) ;
+  diag_flux(F1,F2) ;  //TODO add omp directives cleverly
 
   fprintf(stderr,"1") ;
   /** now update pi to pf **/
+  #pragma omp parallel for \
+    default(shared) \
+    private(i,j,k,geom,q,U,dU)
   ZLOOP {
+
 
     get_geometry(i,j,CENT,&geom) ;
 
@@ -179,10 +186,11 @@ double advance(
 		  + dU[k]
 		  ) ;
     }
-
+	#pragma omp critical //TODO figure out what the problem is here
+	{
     pflag[i][j] = Utoprim_2d(U, geom.gcov, geom.gcon, geom.g, pf[i][j]);
     if( pflag[i][j] ) failimage[0][i+j*N1]++ ;
-
+	} // end omp crit
 #if( DO_FONT_FIX ) 
     if( pflag[i][j] ) { 
       pflag[i][j] = Utoprim_1dvsq2fix1(U, geom.gcov, geom.gcon, geom.g, pf[i][j], Katm[i] );
@@ -193,7 +201,7 @@ double advance(
       }
     }
 #endif
-		
+
   }
 
   ndt = defcon * 1./(1./ndt1 + 1./ndt2) ;
@@ -338,7 +346,7 @@ double fluxcalc(
 		            cmax = MY_MAX(cmax,cmin) ;
 		            dtij = cour*dx[dir]/cmax ;
 			#pragma omp critical
-			{ //TODO why isn't omp min reduction working?
+			{ //TODO why isn't omp min reduction working?, make each thread keep local min and merge at end?
 				if(dtij < ndt) ndt = dtij ;
 			}
 		}
@@ -379,15 +387,6 @@ double fluxcalc(
 		//-new if(bsq/pr[i][j][RHO] > 10. ||
 		//-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
 		//-new else lim = MC ;
-
-		//test_dq[i][j][k] = slope_lim(
-		/*
-		test_dq[((i+2)*(N2+4)+(j+2))*NPR+k] = slope_lim(
-				pr[i-idel][j-jdel][k],
-				pr[i][j][k],
-				pr[i+idel][j+jdel][k]
-				) ;
-		*/
 		test_dq[((i+2)*(N2+4)+(j+2))*NPR+k] = slope_lim(
 				test_pr[((i-idel+2)*(N2+4)+(j-jdel+2))*NPR+k],
 				test_pr[((i+2)*(N2+4)+(j+2))*NPR+k],
@@ -405,12 +404,7 @@ double fluxcalc(
 		}
 		else {
 
-                PLOOP { /*
-                        p_l[k] = pr[i-idel][j-jdel][k] 
-					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        p_r[k] = pr[i][j][k]   
-					- 0.5*dq[i][j][k]
-						*/
+                PLOOP { 
                         p_l[k] = test_pr[((i-idel+2)*(N2+4)+(j-jdel+2))*NPR+k] 
 					+ 0.5*test_dq[((i-idel+2)*(N2+4)+(j-jdel+2))*NPR+k] ;
                         p_r[k] = test_pr[((i+2)*(N2+4)+(j+2))*NPR+k]   
@@ -514,17 +508,27 @@ void flux_ct(double F1[][N2+4][NPR], double F2[][N2+4][NPR])
 
 	/* calculate EMFs */
 	/* Toth approach: just average */
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,j)
 	ZSLOOP(0,N1,0,N2) emf[i][j] = 0.25*(F1[i][j][B2] + F1[i][j-1][B2]
 					  - F2[i][j][B1] - F2[i-1][j][B1]) ;
 
 	/* rewrite EMFs as fluxes, after Toth */
-        ZSLOOP(0,N1,0,N2-1) {
-                F1[i][j][B1] = 0. ;
-                F1[i][j][B2] =  0.5*(emf[i][j] + emf[i][j+1]) ;
-        }
-        ZSLOOP(0,N1-1,0,N2) {
-                F2[i][j][B1] = -0.5*(emf[i][j] + emf[i+1][j]) ;
-                F2[i][j][B2] = 0. ;
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,j)
+    ZSLOOP(0,N1,0,N2-1) {
+            F1[i][j][B1] = 0. ;
+            F1[i][j][B2] =  0.5*(emf[i][j] + emf[i][j+1]) ;
+    }
+
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,j)
+    ZSLOOP(0,N1-1,0,N2) {
+            F2[i][j][B1] = -0.5*(emf[i][j] + emf[i+1][j]) ;
+            F2[i][j][B2] = 0. ;
 	}
 
 }

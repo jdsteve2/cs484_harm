@@ -172,7 +172,7 @@
 #if(EARLY_STOP)
 #define LAST_ITER	(98)
 #endif
-#define TIMING_COMPARISON		(1)
+#define TIMING_COMPARISON		(0)
 
 /* For OMP+MPI */
 #define NUMTHREADS	(12)

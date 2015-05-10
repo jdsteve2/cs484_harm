@@ -96,7 +96,11 @@
 #define FMT_DBL_OUT "%28.18e"
 #define FMT_INT_OUT "%10d"
 
-
+/* For testing */
+#define EARLY_STOP	(1)
+#if(EARLY_STOP)
+#define LAST_ITER	(98)
+#endif
 
 /*************************************************************************
     MNEMONICS SECTION 

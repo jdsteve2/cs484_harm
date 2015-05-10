@@ -53,7 +53,8 @@
 #include <time.h>
 
 #define NRANC 64
-#define RND	( 0x7fff & rand() )
+//#define RND	( 0x7fff & rand() )
+#define RND	( 0x7fff & 999 )  // changed by jdsteve2 for consistancy
 #define MIN	( 2 << 8 )
 
     static int P[NRANC] = {
