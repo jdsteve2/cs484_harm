@@ -171,7 +171,6 @@ double advance(
     private(i,j,k,geom,q,U,dU)
   ZLOOP {
 
-
     get_geometry(i,j,CENT,&geom) ;
 
     source(pb[i][j],&geom,i,j,dU,Dt) ;
@@ -186,13 +185,11 @@ double advance(
 		  + dU[k]
 		  ) ;
     }
-	#pragma omp critical //TODO figure out what the problem is here
-	{
+
     pflag[i][j] = Utoprim_2d(U, geom.gcov, geom.gcon, geom.g, pf[i][j]);
     if( pflag[i][j] ) failimage[0][i+j*N1]++ ;
-	} // end omp crit
 #if( DO_FONT_FIX ) 
-    if( pflag[i][j] ) { 
+    if( pflag[i][j] ) {
       pflag[i][j] = Utoprim_1dvsq2fix1(U, geom.gcov, geom.gcon, geom.g, pf[i][j], Katm[i] );
       if( pflag[i][j] ) { 
 	failimage[1][i+j*N1]++ ;
