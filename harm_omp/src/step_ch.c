@@ -90,20 +90,23 @@ void step_ch()
 	fprintf(stderr,"h") ;
 	ndt = advance(p, p, 0.5*dt, ph) ;   /* time step primitive variables to the half step */
 
-	fixup(ph) ;         /* Set updated densities to floor, set limit for gamma */
-	bound_prim(ph) ;    /* Set boundary conditions for primitive variables, flag bad ghost zones */
-	fixup_utoprim(ph);  /* Fix the failure points using interpolation and updated ghost zone values */
-	bound_prim(ph) ;    /* Reset boundary conditions with fixed up points */
+	fixup(ph) ;         /* Set updated densities to floor, set limit for gamma */ // added omp calls
+	bound_prim(ph) ;    /* Set boundary conditions for primitive variables, flag bad ghost zones */  // added omp calls
+	fixup_utoprim(ph);  /* Fix the failure points using interpolation and updated ghost zone values */ // added omp calls
+	bound_prim(ph) ;    /* Reset boundary conditions with fixed up points */ // added omp calls
 
 	/* Repeat and rinse for the full time (aka corrector) step:  */
 	fprintf(stderr,"f") ;
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,j,k)
 	ZLOOP PLOOP psave[i][j][k] = p[i][j][k] ;
 	ndt = advance(p, ph, dt,    p) ;
 
-	fixup(p) ;
-        bound_prim(p) ;
-	fixup_utoprim(p);
-	bound_prim(p) ;
+	fixup(p) ;  // added omp calls
+    bound_prim(p) ; // added omp calls
+	fixup_utoprim(p); // added omp calls
+	bound_prim(p) ; // added omp calls
 
 
 	/* Determine next time increment based on current characteristic speeds: */
@@ -157,9 +160,9 @@ double advance(
   ndt1 = fluxcalc(pb, F1, 1) ;
   ndt2 = fluxcalc(pb, F2, 2) ;
 
-  fix_flux(F1,F2) ;
+  fix_flux(F1,F2) ;  // added omp calls
 
-  flux_ct(F1,F2) ;
+  flux_ct(F1,F2) ;  // added omp calls
 
   /* evaluate diagnostics based on fluxes */
   diag_flux(F1,F2) ;  //TODO add omp directives cleverly

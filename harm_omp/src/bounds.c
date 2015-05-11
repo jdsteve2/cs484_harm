@@ -51,18 +51,21 @@ void bound_prim( double prim[][N2+4][NPR] )
 {
         int i,j,k ;
 	void inflow_check(double *pr, int ii, int jj, int type );
-        struct of_geom geom ;
+    struct of_geom geom ;
 
-        /* inner r boundary condition: u, gdet extrapolation */
-        for(j=0;j<N2;j++) {
+    /* inner r boundary condition: u, gdet extrapolation */
+	#pragma omp parallel for \
+		default(shared) \
+		private(j,k,geom)
+    for(j=0;j<N2;j++) {
 #if( RESCALE )
 		get_geometry(0,j,CENT,&geom) ;
 		rescale(prim[0][j],FORWARD, 1, 0,j,CENT,&geom) ;
 #endif
-                PLOOP prim[-1][j][k] = prim[0][j][k] ;
-                PLOOP prim[-2][j][k] = prim[0][j][k] ;
-                pflag[-1][j] = pflag[0][j] ;
-                pflag[-2][j] = pflag[0][j] ;
+		PLOOP prim[-1][j][k] = prim[0][j][k] ;
+		PLOOP prim[-2][j][k] = prim[0][j][k] ;
+		pflag[-1][j] = pflag[0][j] ;
+		pflag[-2][j] = pflag[0][j] ;
 
 #if( RESCALE )
 		get_geometry(0,j,CENT,&geom) ;
@@ -73,10 +76,13 @@ void bound_prim( double prim[][N2+4][NPR] )
 		rescale(prim[-2][j],REVERSE, 1, -2,j,CENT,&geom) ;
 #endif
 
-        }
+    }
 
-        /* outer r BC: outflow */
-        for(j=0;j<N2;j++) {
+    /* outer r BC: outflow */
+	#pragma omp parallel for \
+		default(shared) \
+		private(j,k,geom)
+    for(j=0;j<N2;j++) {
 #if( RESCALE )
 		get_geometry(N1-1,j,CENT,&geom) ;
 		rescale(prim[N1-1][j],FORWARD, 1, N1-1,j,CENT,&geom) ;
@@ -95,7 +101,7 @@ void bound_prim( double prim[][N2+4][NPR] )
 		get_geometry(N1+1,j,CENT,&geom) ;
 		rescale(prim[N1+1][j],REVERSE, 1, N1+1,j,CENT,&geom) ;
 #endif
-        }
+    }
 
         /* make sure there is no inflow at the inner boundary */
 	for(i=-2;i<=-1;i++)  for(j=-2;j<N2+2;j++) { 
@@ -104,13 +110,16 @@ void bound_prim( double prim[][N2+4][NPR] )
 	}
 
         /* make sure there is no inflow at the outer boundary */
-        for(i=N1;i<=N1+1;i++)  for(j=-2;j<N2+2;j++) { 
+    for(i=N1;i<=N1+1;i++)  for(j=-2;j<N2+2;j++) { 
 	  inflow_check(prim[N1  ][j],i,j,1) ;
 	  inflow_check(prim[N1+1][j],i,j,1) ;
 	}
 
         /* polar BCs */
-        for(i=-2;i<=N1+1;i++) { 
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,k)
+    for(i=-2;i<=N1+1;i++) { 
 	  PLOOP {
                 prim[i][-1  ][k] = prim[i][0   ][k] ;
                 prim[i][-2  ][k] = prim[i][1   ][k] ;
@@ -121,19 +130,22 @@ void bound_prim( double prim[][N2+4][NPR] )
 	  pflag[i][-2  ] = pflag[i][1   ] ;
 	  pflag[i][N2  ] = pflag[i][N2-1] ;
 	  pflag[i][N2+1] = pflag[i][N2-2] ;
-        }
+    }
 
         /* make sure b and u are antisymmetric at the poles */
-        for(i=-2;i<N1+2;i++) {
-                for(j=-2;j<0;j++) {
-                        prim[i][j][U2] *= -1. ;
-                        prim[i][j][B2] *= -1. ;
-                }
-                for(j=N2;j<N2+2;j++) {
-                        prim[i][j][U2] *= -1. ;
-                        prim[i][j][B2] *= -1. ;
-                }
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,j)
+    for(i=-2;i<N1+2;i++) {
+        for(j=-2;j<0;j++) {
+            prim[i][j][U2] *= -1. ;
+            prim[i][j][B2] *= -1. ;
         }
+        for(j=N2;j<N2+2;j++) {
+            prim[i][j][U2] *= -1. ;
+            prim[i][j][B2] *= -1. ;
+        }
+    }
 }
 
 void inflow_check(double *pr, int ii, int jj, int type )

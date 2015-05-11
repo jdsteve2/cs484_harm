@@ -222,7 +222,7 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   FTYPE rho0,u,p,w,gammasq,gamma,gtmp,W_last,W,utsq,vsq,tmpdiff ;
   int i,j, n, retval, i_increase ;
 
-  FTYPE myBsq,myQdotBsq,myQtsq,myQdotn,myD ; // added by jdsteve2 for OpenMP
+  FTYPE local_Bsq,local_QdotBsq,local_Qtsq,local_Qdotn,local_D ; // added by jdsteve2 for OpenMP
 
   n = NEWT_DIM ;
 
@@ -240,25 +240,25 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   for(i=0;i<4;i++) Qcov[i] = U[QCOV0+i] ;
   raise_g(Qcov,gcon,Qcon) ;
 
-  myBsq = 0. ;
+  local_Bsq = 0. ;
 
-  for(i=1;i<4;i++) myBsq += Bcon[i]*Bcov[i] ;
+  for(i=1;i<4;i++) local_Bsq += Bcon[i]*Bcov[i] ;
 
   QdotB = 0. ; 
   for(i=0;i<4;i++) QdotB += Qcov[i]*Bcon[i] ;
 
-  myQdotBsq = QdotB*QdotB ;
+  local_QdotBsq = QdotB*QdotB ;
 
   ncov_calc(gcon,ncov) ;
   raise_g(ncov,gcon,ncon);
 
-  myQdotn = Qcon[0]*ncov[0] ;
+  local_Qdotn = Qcon[0]*ncov[0] ;
 
   Qsq = 0. ;
   for(i=0;i<4;i++) Qsq += Qcov[i]*Qcon[i] ;
 
-  myQtsq = Qsq + myQdotn*myQdotn ; 
-  myD = U[RHO] ; 
+  local_Qtsq = Qsq + local_Qdotn*local_Qdotn ; 
+  local_D = U[RHO] ; 
 
   /* calculate W from last timestep and use for guess */
   utsq = 0. ;
@@ -279,7 +279,7 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
 	
   // Always calculate rho from D and gamma so that using D in EOS remains consistent
   //   i.e. you don't get positive values for dP/d(vsq) . 
-  rho0 = myD / gamma ;
+  rho0 = local_D / gamma ;
   u = prim[UU] ;
   p = pressure_rho0_u(rho0,u) ;
   w = rho0 + u + p ;
@@ -288,8 +288,8 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
 
   // Make sure that W is large enough so that v^2 < 1 : 
   i_increase = 0;
-  while( (( W_last*W_last*W_last * ( W_last + 2.*myBsq ) 
-	    - myQdotBsq*(2.*W_last + myBsq) ) <= W_last*W_last*(myQtsq-myBsq*myBsq))
+  while( (( W_last*W_last*W_last * ( W_last + 2.*local_Bsq ) 
+	    - local_QdotBsq*(2.*W_last + local_Bsq) ) <= W_last*W_last*(local_Qtsq-local_Bsq*local_Bsq))
 	 && (i_increase < 10) ) {
     W_last *= 10.;
     i_increase++;
@@ -297,10 +297,9 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
 
   // Calculate W and vsq: 
   x_2d[0] =  fabs( W_last );
-  x_2d[1] = x1_of_x0_omp( W_last, myBsq, myQdotBsq, myQtsq ) ; // modified by jdsteve2
+  x_2d[1] = x1_of_x0_omp( W_last, local_Bsq, local_QdotBsq, local_Qtsq ) ; // modified by jdsteve2
 
-  //TODO pass by const reference
-  retval = general_newton_raphson_omp( x_2d, n, func_vsq_omp, myBsq, myQdotBsq, myQtsq, myQdotn, myD) ;  
+  retval = general_newton_raphson_omp( x_2d, n, func_vsq_omp, local_Bsq, local_QdotBsq, local_Qtsq, local_Qdotn, local_D) ;  
 
   W = x_2d[0];
   vsq = x_2d[1];
@@ -326,7 +325,7 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   // Recover the primitive variables from the scalars and conserved variables:
   gtmp = sqrt(1. - vsq);
   gamma = 1./gtmp ;
-  rho0 = myD * gtmp;
+  rho0 = local_D * gtmp;
 
   w = W * (1. - vsq) ;
   p = pressure_rho0_w(rho0,w) ;
@@ -343,8 +342,8 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   prim[UU] = u ;
 
 
-  for(i=1;i<4;i++)  Qtcon[i] = Qcon[i] + ncon[i] * myQdotn;
-  for(i=1;i<4;i++) prim[UTCON1+i-1] = gamma/(W+myBsq) * ( Qtcon[i] + QdotB*Bcon[i]/W ) ;
+  for(i=1;i<4;i++)  Qtcon[i] = Qcon[i] + ncon[i] * local_Qdotn;
+  for(i=1;i<4;i++) prim[UTCON1+i-1] = gamma/(W+local_Bsq) * ( Qtcon[i] + QdotB*Bcon[i]/W ) ;
 	
   /* set field components */
   for(i = BCON1; i <= BCON3; i++) prim[i] = U[i] ;
