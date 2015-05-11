@@ -178,3 +178,8 @@ int NumCols;
 int ColRank;
 
 MPI_Comm Comm2D, CommRow, CommCol;
+
+MPI_Datatype d_col_type, d_row_type;
+MPI_Datatype i_col_type, i_row_type;
+
+int halo_count;
