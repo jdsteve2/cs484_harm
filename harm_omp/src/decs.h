@@ -170,9 +170,9 @@
 /* For testing */
 #define EARLY_STOP	(1)
 #if(EARLY_STOP)
-#define LAST_ITER	(99)
+#define LAST_ITER	(98)
 #endif
-#define TIMING_COMPARISON		(1)
+#define TIMING_COMPARISON		(0)
 
 /* For OMP+MPI */
 #define NUMTHREADS	(12)

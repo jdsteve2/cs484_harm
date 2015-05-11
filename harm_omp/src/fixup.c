@@ -52,6 +52,9 @@ void fixup(double (* pv)[N2+4][NPR])
 {
   int i,j ;
 
+  #pragma omp parallel for \
+    default(shared) \
+    private(i,j)
   ZLOOP {
     fixup1zone( i, j, pv[i][j] );
   }
@@ -157,9 +160,15 @@ void fixup_utoprim( double (*pv)[N2 + 4][NPR] )
   static int pf[9];
 
   /* Flip the logic of the pflag[] so that it now indicates which cells are good  */
+  #pragma omp parallel for \
+    default(shared) \
+    private(i,j)
   ZSLOOP(-2,(N1+1),-2,(N2+1)) { pflag[i][j] = !pflag[i][j] ; } 
 
   /* Fix the interior points first */
+  #pragma omp parallel for \
+    default(shared) \
+    private(i,j,k,pf)
   ZSLOOP(0,(N1-1),0,(N2-1)) { 
     if( pflag[i][j] == 0 ) { 
       pf[1] = pflag[i-1][j+1];   pf[2] = pflag[i][j+1];  pf[3] = pflag[i+1][j+1];

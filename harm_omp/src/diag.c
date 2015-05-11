@@ -231,11 +231,11 @@ void diag_flux(double F1[][N2+4][NPR], double F2[][N2+4][NPR])
 {
 	int j ;
 
-        mdot = edot = ldot = 0. ;
-        for(j=0;j<N2;j++) {
-                mdot += F1[0][j][RHO]*2.*M_PI*dx[2] ;
-                edot -= (F1[0][j][UU] - F1[0][j][RHO])*2.*M_PI*dx[2] ;
-                ldot += F1[0][j][U3] *2.*M_PI*dx[2] ;
-        }
+    mdot = edot = ldot = 0. ;
+    for(j=0;j<N2;j++) {
+            mdot += F1[0][j][RHO]*2.*M_PI*dx[2] ;
+            edot -= (F1[0][j][UU] - F1[0][j][RHO])*2.*M_PI*dx[2] ;
+            ldot += F1[0][j][U3] *2.*M_PI*dx[2] ;
+    }
 }
 

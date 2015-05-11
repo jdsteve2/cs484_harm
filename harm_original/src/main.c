@@ -44,6 +44,7 @@
 
 #include "decs.h"
 #include "defs.h"
+#include "support.h"
 
 /*****************************************************************/
 /*****************************************************************
@@ -59,7 +60,7 @@ int main(int argc,char *argv[])
 {
 	double tdump,timage,tlog ;
 	int nfailed = 0 ;
-	 
+	Timer time; // added by jdsteve2
 	nstep = 0 ;
 
 	/* Perform Initializations, either directly or via checkpoint */
@@ -67,6 +68,9 @@ int main(int argc,char *argv[])
 	if(!restart_init()) { 
 	  init() ;
 	} 
+
+
+
 
 	/* do initial diagnostics */
 	diag(INIT_OUT) ;
@@ -76,6 +80,7 @@ int main(int argc,char *argv[])
 	tlog = t+DTl ;
 
 	defcon = 1. ;
+	startTime(&time) ; // added by jdsteve2
 	while(t < tf) {
 
 
@@ -115,12 +120,21 @@ int main(int argc,char *argv[])
 		}
 		if(nstep > nfailed + DTr*4.*(1 + 1./defcon)) defcon = 1. ;
 
+#if(EARLY_STOP)
+		if(nstep >= LAST_ITER) {
+			printf("STOPPING EARLY AS REQUESTED\n");
+			break;
+		}
+#endif
 
 	}
+	stopTime(&time); // added by jdsteve2
 	fprintf(stderr,"ns,ts: %d %d\n",nstep,nstep*N1*N2) ;
 
 	/* do final diagnostics */
 	diag(FINAL_OUT) ;
+
+	printf("Total time spent in main loop: %f\n",elapsedTime(time)); //added by jdsteve2
 
 	return(0) ;
 }

@@ -74,13 +74,19 @@ FTYPE Bsq,QdotBsq,Qtsq,Qdotn,D ;
 
 // Declarations: 
 static FTYPE vsq_calc(FTYPE W);
+static FTYPE vsq_calc_omp(FTYPE W, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq);
 static int Utoprim_new_body(FTYPE U[], FTYPE gcov[NDIM][NDIM], FTYPE gcon[NDIM][NDIM], FTYPE gdet,  FTYPE prim[]);
 static int general_newton_raphson( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int) );
+static int general_newton_raphson_omp( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int, FTYPE,  FTYPE,  FTYPE,  FTYPE, FTYPE), FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D );
 static void func_vsq( FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *f, FTYPE *df, int n);
+static void func_vsq_omp(FTYPE x[], FTYPE dx[], FTYPE resid[], FTYPE jac[][NEWT_DIM], FTYPE *f, FTYPE *df, int n, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D );
 static FTYPE x1_of_x0(FTYPE x0 ) ;
+static FTYPE x1_of_x0_omp(FTYPE x0, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq ) ;
 static FTYPE pressure_W_vsq(FTYPE W, FTYPE vsq) ;
+static FTYPE pressure_W_vsq_omp(FTYPE W, FTYPE vsq, FTYPE local_D);
 static FTYPE dpdW_calc_vsq(FTYPE W, FTYPE vsq);
 static FTYPE dpdvsq_calc(FTYPE W, FTYPE vsq);
+static FTYPE dpdvsq_calc_omp(FTYPE W, FTYPE vsq, FTYPE local_D);
 
 /**********************************************************************/
 /******************************************************************
@@ -216,8 +222,7 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   FTYPE rho0,u,p,w,gammasq,gamma,gtmp,W_last,W,utsq,vsq,tmpdiff ;
   int i,j, n, retval, i_increase ;
 
-
-
+  FTYPE local_Bsq,local_QdotBsq,local_Qtsq,local_Qdotn,local_D ; // added by jdsteve2 for OpenMP
 
   n = NEWT_DIM ;
 
@@ -235,35 +240,35 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   for(i=0;i<4;i++) Qcov[i] = U[QCOV0+i] ;
   raise_g(Qcov,gcon,Qcon) ;
 
+  local_Bsq = 0. ;
 
-  Bsq = 0. ;
-  for(i=1;i<4;i++) Bsq += Bcon[i]*Bcov[i] ;
+  for(i=1;i<4;i++) local_Bsq += Bcon[i]*Bcov[i] ;
 
-  QdotB = 0. ;
+  QdotB = 0. ; 
   for(i=0;i<4;i++) QdotB += Qcov[i]*Bcon[i] ;
-  QdotBsq = QdotB*QdotB ;
+
+  local_QdotBsq = QdotB*QdotB ;
 
   ncov_calc(gcon,ncov) ;
   raise_g(ncov,gcon,ncon);
 
-  Qdotn = Qcon[0]*ncov[0] ;
+  local_Qdotn = Qcon[0]*ncov[0] ;
 
   Qsq = 0. ;
   for(i=0;i<4;i++) Qsq += Qcov[i]*Qcon[i] ;
 
-  Qtsq = Qsq + Qdotn*Qdotn ;
-
-  D = U[RHO] ;
+  local_Qtsq = Qsq + local_Qdotn*local_Qdotn ; 
+  local_D = U[RHO] ; 
 
   /* calculate W from last timestep and use for guess */
   utsq = 0. ;
   for(i=1;i<4;i++)
     for(j=1;j<4;j++) utsq += gcov[i][j]*prim[UTCON1+i-1]*prim[UTCON1+j-1] ;
 
-
   if( (utsq < 0.) && (fabs(utsq) < 1.0e-13) ) { 
     utsq = fabs(utsq);
   }
+
   if(utsq < 0. || utsq > UTSQ_TOO_BIG) {
     retval = 2;
     return(retval) ;
@@ -274,31 +279,31 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
 	
   // Always calculate rho from D and gamma so that using D in EOS remains consistent
   //   i.e. you don't get positive values for dP/d(vsq) . 
-  rho0 = D / gamma ;
+  rho0 = local_D / gamma ;
   u = prim[UU] ;
   p = pressure_rho0_u(rho0,u) ;
   w = rho0 + u + p ;
 
   W_last = w*gammasq ;
 
-
   // Make sure that W is large enough so that v^2 < 1 : 
   i_increase = 0;
-  while( (( W_last*W_last*W_last * ( W_last + 2.*Bsq ) 
-	    - QdotBsq*(2.*W_last + Bsq) ) <= W_last*W_last*(Qtsq-Bsq*Bsq))
+  while( (( W_last*W_last*W_last * ( W_last + 2.*local_Bsq ) 
+	    - local_QdotBsq*(2.*W_last + local_Bsq) ) <= W_last*W_last*(local_Qtsq-local_Bsq*local_Bsq))
 	 && (i_increase < 10) ) {
     W_last *= 10.;
     i_increase++;
   }
-  
+
   // Calculate W and vsq: 
   x_2d[0] =  fabs( W_last );
-  x_2d[1] = x1_of_x0( W_last ) ;
-  retval = general_newton_raphson( x_2d, n, func_vsq ) ;  
+  x_2d[1] = x1_of_x0_omp( W_last, local_Bsq, local_QdotBsq, local_Qtsq ) ; // modified by jdsteve2
+
+  retval = general_newton_raphson_omp( x_2d, n, func_vsq_omp, local_Bsq, local_QdotBsq, local_Qtsq, local_Qdotn, local_D) ;  
 
   W = x_2d[0];
   vsq = x_2d[1];
-	
+
   /* Problem with solver, so return denoting error before doing anything further */
   if( (retval != 0) || (W == FAIL_VAL) ) {
     retval = retval*100+1;
@@ -320,7 +325,7 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   // Recover the primitive variables from the scalars and conserved variables:
   gtmp = sqrt(1. - vsq);
   gamma = 1./gtmp ;
-  rho0 = D * gtmp;
+  rho0 = local_D * gtmp;
 
   w = W * (1. - vsq) ;
   p = pressure_rho0_w(rho0,w) ;
@@ -337,14 +342,14 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   prim[UU] = u ;
 
 
-  for(i=1;i<4;i++)  Qtcon[i] = Qcon[i] + ncon[i] * Qdotn;
-  for(i=1;i<4;i++) prim[UTCON1+i-1] = gamma/(W+Bsq) * ( Qtcon[i] + QdotB*Bcon[i]/W ) ;
+  for(i=1;i<4;i++)  Qtcon[i] = Qcon[i] + ncon[i] * local_Qdotn;
+  for(i=1;i<4;i++) prim[UTCON1+i-1] = gamma/(W+local_Bsq) * ( Qtcon[i] + QdotB*Bcon[i]/W ) ;
 	
   /* set field components */
   for(i = BCON1; i <= BCON3; i++) prim[i] = U[i] ;
 
-
   /* done! */
+
   return(retval) ;
 
 }
@@ -368,6 +373,15 @@ static FTYPE vsq_calc(FTYPE W)
 	return(  ( Wsq * Qtsq  + QdotBsq * (Bsq + 2.*W)) / (Wsq*Xsq) );
 }
 
+static FTYPE vsq_calc_omp(FTYPE W, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq)
+{
+	FTYPE Wsq,Xsq;
+	
+	Wsq = W*W ;
+	Xsq = (local_Bsq + W) * (local_Bsq + W);
+
+	return(  ( Wsq * local_Qtsq  + local_QdotBsq * (local_Bsq + 2.*W)) / (Wsq*Xsq) );
+}
 
 /********************************************************************
 
@@ -384,12 +398,19 @@ static FTYPE x1_of_x0(FTYPE x0 )
   FTYPE x1,vsq;
   FTYPE dv = 1.e-15;
   
-
   vsq = fabs(vsq_calc(x0)) ; // guaranteed to be positive 
 
+  return( ( vsq > 1. ) ? (1.0 - dv) : vsq   ); 
+}
+
+static FTYPE x1_of_x0_omp(FTYPE x0, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq) 
+{
+  FTYPE x1,vsq;
+  FTYPE dv = 1.e-15;
+  
+  vsq = fabs(vsq_calc_omp(x0, local_Bsq, local_QdotBsq, local_Qtsq)) ; // guaranteed to be positive 
 
   return( ( vsq > 1. ) ? (1.0 - dv) : vsq   ); 
-
 }
 
 /********************************************************************
@@ -522,6 +543,101 @@ static int general_newton_raphson( FTYPE x[], int n,
 }
 
 
+static int general_newton_raphson_omp( FTYPE x[], int n, 
+			    void (*funcd) (FTYPE [], FTYPE [], FTYPE [], 
+					   FTYPE [][NEWT_DIM], FTYPE *, 
+					   FTYPE *, int,
+						FTYPE, FTYPE, FTYPE, FTYPE, FTYPE), 
+				FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D )
+{
+  FTYPE f, df, dx[NEWT_DIM], x_old[NEWT_DIM];
+  FTYPE resid[NEWT_DIM], jac[NEWT_DIM][NEWT_DIM];
+  FTYPE errx, x_orig[NEWT_DIM];
+  int    n_iter, id, jd, i_extra, doing_extra;
+  FTYPE dW,dvsq,vsq_old,vsq,W,W_old;
+
+  int   keep_iterating;
+
+  // Initialize various parameters and variables:
+  errx = 1. ; 
+  df = f = 1.;
+  i_extra = doing_extra = 0;
+  for( id = 0; id < n ; id++)  x_old[id] = x_orig[id] = x[id] ;
+
+  vsq_old = vsq = W = W_old = 0.;
+  n_iter = 0;
+
+  /* Start the Newton-Raphson iterations : */
+  keep_iterating = 1;
+  while( keep_iterating ) { 
+
+    //(*funcd) (x, dx, resid, jac, &f, &df, n);  /* returns with new dx, f, df */
+    (*funcd) (x, dx, resid, jac, &f, &df, n, local_Bsq, local_QdotBsq, local_Qtsq, local_Qdotn, local_D);  /* returns with new dx, f, df */
+
+    /* Save old values before calculating the new: */
+    errx = 0.;
+    for( id = 0; id < n ; id++) {
+      x_old[id] = x[id] ;
+    }
+
+    /* Make the newton step: */
+    for( id = 0; id < n ; id++) {
+      x[id] += dx[id]  ;
+    }
+
+    /****************************************/
+    /* Calculate the convergence criterion */
+    /****************************************/
+    errx  = (x[0]==0.) ?  fabs(dx[0]) : fabs(dx[0]/x[0]);
+
+
+    /****************************************/
+    /* Make sure that the new x[] is physical : */
+    /****************************************/
+    validate_x( x, x_old ) ;
+
+
+    /*****************************************************************************/
+    /* If we've reached the tolerance level, then just do a few extra iterations */
+    /*  before stopping                                                          */
+    /*****************************************************************************/
+    
+    if( (fabs(errx) <= NEWT_TOL) && (doing_extra == 0) && (EXTRA_NEWT_ITER > 0) ) {
+      doing_extra = 1;
+    }
+
+    if( doing_extra == 1 ) i_extra++ ;
+
+    if( ((fabs(errx) <= NEWT_TOL)&&(doing_extra == 0)) 
+	|| (i_extra > EXTRA_NEWT_ITER) || (n_iter >= (MAX_NEWT_ITER-1)) ) {
+      keep_iterating = 0;
+    }
+
+    n_iter++;
+
+  }   // END of while(keep_iterating)
+
+
+    /*  Check for bad untrapped divergences : */
+  if( (finite(f)==0) ||  (finite(df)==0) ) {
+    return(2);
+  }
+
+
+  if( fabs(errx) > MIN_NEWT_TOL){
+    return(1);
+  } 
+  if( (fabs(errx) <= MIN_NEWT_TOL) && (fabs(errx) > NEWT_TOL) ){
+    return(0);
+  }
+  if( fabs(errx) <= NEWT_TOL ){
+    return(0);
+  }
+
+  return(0);
+
+}
+
 
 /**********************************************************************/
 /*********************************************************************************
@@ -606,6 +722,72 @@ static void func_vsq(FTYPE x[], FTYPE dx[], FTYPE resid[],
 }
 
 
+static void func_vsq_omp(FTYPE x[], FTYPE dx[], FTYPE resid[], 
+		      FTYPE jac[][NEWT_DIM], FTYPE *f, FTYPE *df, int n, 
+				FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D )
+{
+
+  
+  FTYPE  W, vsq, Wsq, p_tmp, dPdvsq, dPdW, temp, detJ,tmp2,tmp3;
+  FTYPE t11;
+  FTYPE t16;
+  FTYPE t18;
+  FTYPE t2;
+  FTYPE t21;
+  FTYPE t23;
+  FTYPE t24;
+  FTYPE t25;
+  FTYPE t3;
+  FTYPE t35;
+  FTYPE t36;
+  FTYPE t4;
+  FTYPE t40;
+  FTYPE t9;
+
+  W = x[0];
+  vsq = x[1];
+  
+  Wsq = W*W;
+
+  p_tmp  = pressure_W_vsq_omp( W, vsq, local_D );
+  dPdW   = dpdW_calc_vsq( W, vsq );
+  dPdvsq = dpdvsq_calc_omp( W, vsq, local_D );
+
+  // These expressions were calculated using Mathematica, but made into efficient 
+  // code using Maple.  Since we know the analytic form of the equations, we can 
+  // explicitly calculate the Newton-Raphson step: 
+
+  t2 = -0.5*local_Bsq+dPdvsq;
+  t3 = local_Bsq+W;
+  t4 = t3*t3;
+  t9 = 1/Wsq;
+  t11 = local_Qtsq-vsq*t4+local_QdotBsq*(local_Bsq+2.0*W)*t9;
+  t16 = local_QdotBsq*t9;
+  t18 = -local_Qdotn-0.5*local_Bsq*(1.0+vsq)+0.5*t16-W+p_tmp;
+  t21 = 1/t3;
+  t23 = 1/W;
+  t24 = t16*t23;
+  t25 = -1.0+dPdW-t24;
+  t35 = t25*t3+(local_Bsq-2.0*dPdvsq)*(local_QdotBsq+vsq*Wsq*W)*t9*t23;
+  t36 = 1/t35;
+  dx[0] = -(t2*t11+t4*t18)*t21*t36;
+  t40 = (vsq+t24)*t3;
+  dx[1] = -(-t25*t11-2.0*t40*t18)*t21*t36;
+  detJ = t3*t35;
+  jac[0][0] = -2.0*t40;
+  jac[0][1] = -t4;
+  jac[1][0] = t25;
+  jac[1][1] = t2;
+  resid[0] = t11;
+  resid[1] = t18;
+
+  *df = -resid[0]*resid[0] - resid[1]*resid[1];
+
+  *f = -0.5 * ( *df );
+
+}
+
+
 /********************************************************************** 
  ********************************************************************** 
    
@@ -634,6 +816,15 @@ static FTYPE pressure_W_vsq(FTYPE W, FTYPE vsq)
 
 }
 
+static FTYPE pressure_W_vsq_omp(FTYPE W, FTYPE vsq, FTYPE local_D) 
+{
+  FTYPE gtmp;
+  
+  gtmp = 1. - vsq;
+  
+  return(  (GAMMA - 1.) * ( W * gtmp  -  local_D * sqrt(gtmp) ) / GAMMA  );
+
+}
 
 /**********************************************************************/
 /********************************************************************** 
@@ -658,7 +849,10 @@ static FTYPE dpdvsq_calc(FTYPE W, FTYPE vsq)
 {
   return( (GAMMA - 1.) * ( 0.5 * D / sqrt(1.-vsq)  - W  ) / GAMMA  ) ;
 }
-
+static FTYPE dpdvsq_calc_omp(FTYPE W, FTYPE vsq, FTYPE local_D)
+{
+  return( (GAMMA - 1.) * ( 0.5 * local_D / sqrt(1.-vsq)  - W  ) / GAMMA  ) ;
+}
 
 /****************************************************************************** 
              END   OF   UTOPRIM_2D.C

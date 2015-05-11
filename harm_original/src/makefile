@@ -73,13 +73,13 @@ all: $(EXE) image_interp
 SRCS = \
 bounds.c coord.c diag.c dump.c fixup.c \
 image.c init.c interp.c main.c metric.c lu.c \
-phys.c ranc.c restart.c step_ch.c \
+phys.c ranc.c restart.c step_ch.c support.c \
 utoprim_1dfix1.c utoprim_1dvsq2fix1.c utoprim_2d.c u2p_util.c
 
 OBJS = \
 bounds.o coord.o diag.o dump.o fixup.o \
 image.o init.o interp.o main.o metric.o lu.o \
-phys.o ranc.o restart.o step_ch.o \
+phys.o ranc.o restart.o step_ch.o support.o \
 utoprim_1dfix1.o utoprim_1dvsq2fix1.o utoprim_2d.o u2p_util.o
 
 INCS = decs.h  defs.h  u2p_defs.h  u2p_util.h

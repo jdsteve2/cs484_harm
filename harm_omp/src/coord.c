@@ -129,6 +129,9 @@ void fix_flux(double F1[][N2+4][NPR], double F2[][N2+4][NPR])
 {
 	int i,j,k ;
 
+	#pragma omp parallel for \
+		default(shared) \
+		private(i,k)
 	for(i=-1;i<N1;i++) {
 
 		F1[i][-1][B2] = -F1[i][0][B2] ;
@@ -138,6 +141,9 @@ void fix_flux(double F1[][N2+4][NPR], double F2[][N2+4][NPR])
 		PLOOP F2[i][0][k] = 0. ;
 	}
 
+	#pragma omp parallel for \
+		default(shared) \
+		private(j)
 	for(j=-1;j<N2;j++) {
 	  if(F1[0 ][j][RHO]>0) F1[0 ][j][RHO]=0;
 	  if(F1[N1][j][RHO]<0) F1[N1][j][RHO]=0;
