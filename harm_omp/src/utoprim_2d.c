@@ -77,6 +77,7 @@ static FTYPE vsq_calc(FTYPE W);
 static FTYPE vsq_calc_omp(FTYPE W, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq);
 static int Utoprim_new_body(FTYPE U[], FTYPE gcov[NDIM][NDIM], FTYPE gcon[NDIM][NDIM], FTYPE gdet,  FTYPE prim[]);
 static int general_newton_raphson( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int) );
+static int general_newton_raphson_omp( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int), FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D );
 static void func_vsq( FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *f, FTYPE *df, int n);
 static FTYPE x1_of_x0(FTYPE x0 ) ;
 static FTYPE x1_of_x0_omp(FTYPE x0, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq ) ;
@@ -295,16 +296,8 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   x_2d[0] =  fabs( W_last );
   x_2d[1] = x1_of_x0_omp( W_last, myBsq, myQdotBsq, myQtsq ) ; // modified by jdsteve2
 
-  #pragma omp critical //TODO rewrite to remove this critical
-  {
-
-  Bsq = myBsq; // added by jdsteve2
-  QdotBsq = myQdotBsq; // added by jdsteve2
-  Qtsq = myQtsq; // added by jdsteve2
-  Qdotn = myQdotn; // added by jdsteve2
-  D = myD; // added by jdsteve2
-  retval = general_newton_raphson( x_2d, n, func_vsq ) ;  
-  }
+  //TODO pass by const reference
+  retval = general_newton_raphson_omp( x_2d, n, func_vsq, myBsq, myQdotBsq, myQtsq, myQdotn, myD ) ;  
 
   W = x_2d[0];
   vsq = x_2d[1];
@@ -547,6 +540,108 @@ static int general_newton_raphson( FTYPE x[], int n,
 
 }
 
+
+static int general_newton_raphson_omp( FTYPE x[], int n, 
+			    void (*funcd) (FTYPE [], FTYPE [], FTYPE [], 
+					   FTYPE [][NEWT_DIM], FTYPE *, 
+					   FTYPE *, int), 
+				FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D )
+{
+  FTYPE f, df, dx[NEWT_DIM], x_old[NEWT_DIM];
+  FTYPE resid[NEWT_DIM], jac[NEWT_DIM][NEWT_DIM];
+  FTYPE errx, x_orig[NEWT_DIM];
+  int    n_iter, id, jd, i_extra, doing_extra;
+  FTYPE dW,dvsq,vsq_old,vsq,W,W_old;
+
+  int   keep_iterating;
+
+  #pragma omp critical
+  {
+  Bsq = local_Bsq; // added by jdsteve2
+  QdotBsq = local_QdotBsq; // added by jdsteve2
+  Qtsq = local_Qtsq; // added by jdsteve2
+  Qdotn = local_Qdotn; // added by jdsteve2
+  D = local_D; // added by jdsteve2
+
+  // Initialize various parameters and variables:
+  errx = 1. ; 
+  df = f = 1.;
+  i_extra = doing_extra = 0;
+  for( id = 0; id < n ; id++)  x_old[id] = x_orig[id] = x[id] ;
+
+  vsq_old = vsq = W = W_old = 0.;
+  n_iter = 0;
+
+  /* Start the Newton-Raphson iterations : */
+  keep_iterating = 1;
+  while( keep_iterating ) { 
+
+    (*funcd) (x, dx, resid, jac, &f, &df, n);  /* returns with new dx, f, df */
+      
+
+    /* Save old values before calculating the new: */
+    errx = 0.;
+    for( id = 0; id < n ; id++) {
+      x_old[id] = x[id] ;
+    }
+
+    /* Make the newton step: */
+    for( id = 0; id < n ; id++) {
+      x[id] += dx[id]  ;
+    }
+
+    /****************************************/
+    /* Calculate the convergence criterion */
+    /****************************************/
+    errx  = (x[0]==0.) ?  fabs(dx[0]) : fabs(dx[0]/x[0]);
+
+
+    /****************************************/
+    /* Make sure that the new x[] is physical : */
+    /****************************************/
+    validate_x( x, x_old ) ;
+
+
+    /*****************************************************************************/
+    /* If we've reached the tolerance level, then just do a few extra iterations */
+    /*  before stopping                                                          */
+    /*****************************************************************************/
+    
+    if( (fabs(errx) <= NEWT_TOL) && (doing_extra == 0) && (EXTRA_NEWT_ITER > 0) ) {
+      doing_extra = 1;
+    }
+
+    if( doing_extra == 1 ) i_extra++ ;
+
+    if( ((fabs(errx) <= NEWT_TOL)&&(doing_extra == 0)) 
+	|| (i_extra > EXTRA_NEWT_ITER) || (n_iter >= (MAX_NEWT_ITER-1)) ) {
+      keep_iterating = 0;
+    }
+
+    n_iter++;
+
+  }   // END of while(keep_iterating)
+
+}
+    /*  Check for bad untrapped divergences : */
+  if( (finite(f)==0) ||  (finite(df)==0) ) {
+    return(2);
+  }
+
+
+  if( fabs(errx) > MIN_NEWT_TOL){
+    return(1);
+  } 
+  if( (fabs(errx) <= MIN_NEWT_TOL) && (fabs(errx) > NEWT_TOL) ){
+    return(0);
+  }
+  if( fabs(errx) <= NEWT_TOL ){
+    return(0);
+  }
+
+  return(0);
+
+}
 
 
 /**********************************************************************/
