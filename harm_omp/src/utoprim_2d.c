@@ -77,13 +77,16 @@ static FTYPE vsq_calc(FTYPE W);
 static FTYPE vsq_calc_omp(FTYPE W, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq);
 static int Utoprim_new_body(FTYPE U[], FTYPE gcov[NDIM][NDIM], FTYPE gcon[NDIM][NDIM], FTYPE gdet,  FTYPE prim[]);
 static int general_newton_raphson( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int) );
-static int general_newton_raphson_omp( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int), FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D );
+static int general_newton_raphson_omp( FTYPE x[], int n, void (*funcd) (FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *, FTYPE *, int, FTYPE,  FTYPE,  FTYPE,  FTYPE, FTYPE), FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D );
 static void func_vsq( FTYPE [], FTYPE [], FTYPE [], FTYPE [][NEWT_DIM], FTYPE *f, FTYPE *df, int n);
+static void func_vsq_omp(FTYPE x[], FTYPE dx[], FTYPE resid[], FTYPE jac[][NEWT_DIM], FTYPE *f, FTYPE *df, int n, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D );
 static FTYPE x1_of_x0(FTYPE x0 ) ;
 static FTYPE x1_of_x0_omp(FTYPE x0, FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq ) ;
 static FTYPE pressure_W_vsq(FTYPE W, FTYPE vsq) ;
+static FTYPE pressure_W_vsq_omp(FTYPE W, FTYPE vsq, FTYPE local_D);
 static FTYPE dpdW_calc_vsq(FTYPE W, FTYPE vsq);
 static FTYPE dpdvsq_calc(FTYPE W, FTYPE vsq);
+static FTYPE dpdvsq_calc_omp(FTYPE W, FTYPE vsq, FTYPE local_D);
 
 /**********************************************************************/
 /******************************************************************
@@ -297,7 +300,7 @@ static int Utoprim_new_body(FTYPE U[NPR], FTYPE gcov[NDIM][NDIM],
   x_2d[1] = x1_of_x0_omp( W_last, myBsq, myQdotBsq, myQtsq ) ; // modified by jdsteve2
 
   //TODO pass by const reference
-  retval = general_newton_raphson_omp( x_2d, n, func_vsq, myBsq, myQdotBsq, myQtsq, myQdotn, myD ) ;  
+  retval = general_newton_raphson_omp( x_2d, n, func_vsq_omp, myBsq, myQdotBsq, myQtsq, myQdotn, myD) ;  
 
   W = x_2d[0];
   vsq = x_2d[1];
@@ -544,7 +547,8 @@ static int general_newton_raphson( FTYPE x[], int n,
 static int general_newton_raphson_omp( FTYPE x[], int n, 
 			    void (*funcd) (FTYPE [], FTYPE [], FTYPE [], 
 					   FTYPE [][NEWT_DIM], FTYPE *, 
-					   FTYPE *, int), 
+					   FTYPE *, int,
+						FTYPE, FTYPE, FTYPE, FTYPE, FTYPE), 
 				FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D )
 {
   FTYPE f, df, dx[NEWT_DIM], x_old[NEWT_DIM];
@@ -554,14 +558,6 @@ static int general_newton_raphson_omp( FTYPE x[], int n,
   FTYPE dW,dvsq,vsq_old,vsq,W,W_old;
 
   int   keep_iterating;
-
-  #pragma omp critical
-  {
-  Bsq = local_Bsq; // added by jdsteve2
-  QdotBsq = local_QdotBsq; // added by jdsteve2
-  Qtsq = local_Qtsq; // added by jdsteve2
-  Qdotn = local_Qdotn; // added by jdsteve2
-  D = local_D; // added by jdsteve2
 
   // Initialize various parameters and variables:
   errx = 1. ; 
@@ -576,8 +572,8 @@ static int general_newton_raphson_omp( FTYPE x[], int n,
   keep_iterating = 1;
   while( keep_iterating ) { 
 
-    (*funcd) (x, dx, resid, jac, &f, &df, n);  /* returns with new dx, f, df */
-      
+    //(*funcd) (x, dx, resid, jac, &f, &df, n);  /* returns with new dx, f, df */
+    (*funcd) (x, dx, resid, jac, &f, &df, n, local_Bsq, local_QdotBsq, local_Qtsq, local_Qdotn, local_D);  /* returns with new dx, f, df */
 
     /* Save old values before calculating the new: */
     errx = 0.;
@@ -622,7 +618,7 @@ static int general_newton_raphson_omp( FTYPE x[], int n,
 
   }   // END of while(keep_iterating)
 
-}
+
     /*  Check for bad untrapped divergences : */
   if( (finite(f)==0) ||  (finite(df)==0) ) {
     return(2);
@@ -727,6 +723,72 @@ static void func_vsq(FTYPE x[], FTYPE dx[], FTYPE resid[],
 }
 
 
+static void func_vsq_omp(FTYPE x[], FTYPE dx[], FTYPE resid[], 
+		      FTYPE jac[][NEWT_DIM], FTYPE *f, FTYPE *df, int n, 
+				FTYPE local_Bsq, FTYPE local_QdotBsq, FTYPE local_Qtsq, FTYPE local_Qdotn, FTYPE local_D )
+{
+
+  
+  FTYPE  W, vsq, Wsq, p_tmp, dPdvsq, dPdW, temp, detJ,tmp2,tmp3;
+  FTYPE t11;
+  FTYPE t16;
+  FTYPE t18;
+  FTYPE t2;
+  FTYPE t21;
+  FTYPE t23;
+  FTYPE t24;
+  FTYPE t25;
+  FTYPE t3;
+  FTYPE t35;
+  FTYPE t36;
+  FTYPE t4;
+  FTYPE t40;
+  FTYPE t9;
+
+  W = x[0];
+  vsq = x[1];
+  
+  Wsq = W*W;
+
+  p_tmp  = pressure_W_vsq_omp( W, vsq, local_D );
+  dPdW   = dpdW_calc_vsq( W, vsq );
+  dPdvsq = dpdvsq_calc_omp( W, vsq, local_D );
+
+  // These expressions were calculated using Mathematica, but made into efficient 
+  // code using Maple.  Since we know the analytic form of the equations, we can 
+  // explicitly calculate the Newton-Raphson step: 
+
+  t2 = -0.5*local_Bsq+dPdvsq;
+  t3 = local_Bsq+W;
+  t4 = t3*t3;
+  t9 = 1/Wsq;
+  t11 = local_Qtsq-vsq*t4+local_QdotBsq*(local_Bsq+2.0*W)*t9;
+  t16 = local_QdotBsq*t9;
+  t18 = -local_Qdotn-0.5*local_Bsq*(1.0+vsq)+0.5*t16-W+p_tmp;
+  t21 = 1/t3;
+  t23 = 1/W;
+  t24 = t16*t23;
+  t25 = -1.0+dPdW-t24;
+  t35 = t25*t3+(local_Bsq-2.0*dPdvsq)*(local_QdotBsq+vsq*Wsq*W)*t9*t23;
+  t36 = 1/t35;
+  dx[0] = -(t2*t11+t4*t18)*t21*t36;
+  t40 = (vsq+t24)*t3;
+  dx[1] = -(-t25*t11-2.0*t40*t18)*t21*t36;
+  detJ = t3*t35;
+  jac[0][0] = -2.0*t40;
+  jac[0][1] = -t4;
+  jac[1][0] = t25;
+  jac[1][1] = t2;
+  resid[0] = t11;
+  resid[1] = t18;
+
+  *df = -resid[0]*resid[0] - resid[1]*resid[1];
+
+  *f = -0.5 * ( *df );
+
+}
+
+
 /********************************************************************** 
  ********************************************************************** 
    
@@ -755,6 +817,15 @@ static FTYPE pressure_W_vsq(FTYPE W, FTYPE vsq)
 
 }
 
+static FTYPE pressure_W_vsq_omp(FTYPE W, FTYPE vsq, FTYPE local_D) 
+{
+  FTYPE gtmp;
+  
+  gtmp = 1. - vsq;
+  
+  return(  (GAMMA - 1.) * ( W * gtmp  -  local_D * sqrt(gtmp) ) / GAMMA  );
+
+}
 
 /**********************************************************************/
 /********************************************************************** 
@@ -779,7 +850,10 @@ static FTYPE dpdvsq_calc(FTYPE W, FTYPE vsq)
 {
   return( (GAMMA - 1.) * ( 0.5 * D / sqrt(1.-vsq)  - W  ) / GAMMA  ) ;
 }
-
+static FTYPE dpdvsq_calc_omp(FTYPE W, FTYPE vsq, FTYPE local_D)
+{
+  return( (GAMMA - 1.) * ( 0.5 * local_D / sqrt(1.-vsq)  - W  ) / GAMMA  ) ;
+}
 
 /****************************************************************************** 
              END   OF   UTOPRIM_2D.C

@@ -52,8 +52,8 @@
 *************************************************************************/
 /** here are the few things that we change frequently **/
 
-#define N1       (64)        /* number of physical zones in X1-direction */
-#define N2       (64)        /* number of physical zones in X2-direction */
+#define N1       (256)        /* number of physical zones in X1-direction */
+#define N2       (256)        /* number of physical zones in X2-direction */
 
 #define NPR        (8)        /* number of primitive variables */
 #define NDIM       (4)        /* number of total dimensions.  Never changes */
