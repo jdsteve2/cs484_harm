@@ -74,6 +74,8 @@ void init()
     double **A;
     double rho_av,rhomax,umax,beta,bsq_ij,bsq_max,norm,q,beta_act ;
     double rmax, lfish_calc(double rmax) ;
+    
+    double lmax[2], gmax[2]; // temp arrays for mpi reductions
 
     D_Alloc_2D(A, N1+1, N2+1);
     
@@ -112,7 +114,7 @@ void init()
     }
 
     /* output choices */
-    tf = 20.0 ;
+    tf = 50.0 ;
 
     DTd = 50. ;	/* dumping frequency, in units of M */
     DTl = 2. ;	/* logfile frequency, in units of M */
@@ -229,8 +231,9 @@ void init()
 
     }
 
+
+
     // Globally maximize rhomax, umax
-    double lmax[2], gmax[2];
     lmax[0] = rhomax; lmax[1] = umax;
    
     MPI_Allreduce(lmax, gmax, 2, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
@@ -246,7 +249,7 @@ void init()
     umax /= rhomax ;
     rhomax = 1. ;
 
-    // MPI Halo exchange p [ deferred as fixup does that for us! ]
+    // Halo exchange p [ deferred as fixup does that for us! ]
     fixup(p) ;
     bound_prim(p);
 
@@ -274,7 +277,7 @@ void init()
 
     }
 
-    // MPI Halo Exchange: A, 1
+    // Halo Exchange: A, 1 [not needed as p is up to date already]
 
     /* now differentiate to find cell-centered B,
        and begin normalization */
@@ -294,7 +297,10 @@ void init()
         if(bsq_ij > bsq_max) bsq_max = bsq_ij ;
     }
 
-    // MPI AllReduce: bsq_max, max 
+    // Globally maximize bsq_max
+    lmax[0] = bsq_max;
+    MPI_Allreduce(lmax, gmax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    bsq_max = gmax[0];
 
     if(WorldRank == 0)
         fprintf(stderr,"initial bsq_max: %g\n",bsq_max) ;
@@ -314,18 +320,21 @@ void init()
         if(bsq_ij > bsq_max) bsq_max = bsq_ij ;
     }
     
-    // MPI AllReduce: bsq_max, max
+    // Globally maximize bsq_max
+    lmax[0] = bsq_max;
+    MPI_Allreduce(lmax, gmax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    bsq_max = gmax[0];
     
     beta_act = (gam - 1.)*umax/(0.5*bsq_max) ;
     if(WorldRank == 0)
         fprintf(stderr,"final beta: %g (should be %g)\n",beta_act,beta) ;
 
+    // Halo exchange: p, 2 [ fixup takes care of this ]
+    // Halo exchange: pflag, 2 [ fixup takes care of this ]
+
     /* enforce boundary conditions */
     fixup(p) ;
     bound_prim(p) ;
-
-    // MPI Halo exchange: p, 2
-    // MPI Halo exchange: pflag, 2
 
 
 #if( DO_FONT_FIX ) 

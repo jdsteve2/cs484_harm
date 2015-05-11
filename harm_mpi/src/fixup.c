@@ -57,8 +57,9 @@ void fixup(double (** pv)[NPR])
     fixup1zone( i, j, pv[i][j] );
   }
 
-  // MPI Halo exchange: pv, pflag, 2
-
+  // Halo exchange: pv, pflag, 2
+  halo_npr(pv);
+  //halo_pflag();
 }
 
 void fixup1zone( int i, int j, double pv[NPR] ) 
@@ -250,16 +251,19 @@ void set_Katm( void )
 
         }
 
-        // MPI Synchronize: One after the other based on RowRank on CommCol
-
-        for( i = 0 ; i < N1; i++ ) { 
-            fflush(stdout);
-            fprintf(stdout,"Katm[%d] = %26.20e \n", i, Katm[i] );
-            fflush(stdout);
+        for( j = 0; j < NumRows; j++) {
+            if(RowRank == j) {
+                for( i = 0 ; i < N1; i++ ) { 
+                    fflush(stdout);
+                    fprintf(stdout,"Katm[%d] = %26.20e \n", i + (RowRank*N1), Katm[i] );
+                    fflush(stdout);
+                }
+            }
+            MPI_Barrier(CommCol);
         }
     }
 
-    // MPI Broadcast Katm across the row for each process on CommRow
+    MPI_Bcast(Katm, N1, MPI_DOUBLE, 0, CommRow);
 
   return;
 }

@@ -231,7 +231,7 @@ void set_grid()
 		gcon_func(gcov[i][j][FACE2],gcon[i][j][FACE2]) ;
 	}
 
-    // MPI Halo exchange: gcov, gcon, conn, gdet
+    // Halo exchange: gcov, gcon, conn, gdet
     // No need here as the values are rightly initialized here for all nodes
 
 	/* done! */
@@ -274,6 +274,20 @@ void init_mpi(int *argc, char*** argv)
 	// Divide N1 and N2 for each process
 	N1 = GlobalN1/NumRows;
 	N2 = GlobalN2/NumCols;
+
+    MPI_Type_vector(N1+4, 2*NPR, (N2+4)*NPR, MPI_DOUBLE, &d_col_type);
+    MPI_Type_commit(&d_col_type);
+    
+    MPI_Type_contiguous(2*(N2+4)*NPR, MPI_DOUBLE, &d_row_type);
+    MPI_Type_commit(&d_row_type);
+
+    MPI_Type_vector(N1+4, 2, N2+4, MPI_INT, &i_col_type);
+    MPI_Type_commit(&i_col_type);
+    
+    MPI_Type_contiguous(2*(N2+4), MPI_INT, &i_row_type);
+    MPI_Type_commit(&i_row_type);
+    
+    halo_count = 0;
 }
 
 /*****************************************************************
