@@ -244,6 +244,7 @@ double fluxcalc(
 	Timer time,tOMP;
 	double tot_time,tot_timeOMP;
 	int tid, threadstart, threadfinish, rows_per_thread;
+	double ndt_private;
 
 
 #if(TIMING_COMPARISON)
@@ -288,7 +289,7 @@ double fluxcalc(
 				) ;
 		}
 	}
-
+/*
 	#pragma omp parallel for \
 		default(shared) \
 		private(i,j,k, \
@@ -297,7 +298,7 @@ double fluxcalc(
 				p_l,p_r,F_l,F_r,U_l,U_r)
 	ZSLOOP(-jdel,N1,-idel,N2) {
 
-		/* this avoids problems on the pole */
+		// this avoids problems on the pole 
 		if(dir == 2 && (j == 0 || j == N2)) {
 			PLOOP F[i][j][k] = 0. ;
 		} else {
@@ -342,7 +343,7 @@ double fluxcalc(
 					- ctop*(U_r[k] - U_l[k])) 
 				) ;
 
-		            /* evaluate restriction on timestep */
+		            // evaluate restriction on timestep 
 		            cmax = MY_MAX(cmax,cmin) ;
 		            dtij = cour*dx[dir]/cmax ;
 			#pragma omp critical
@@ -351,6 +352,89 @@ double fluxcalc(
 			}
 		}
 	}
+*/
+
+	rows_per_thread = ceil(((float)N1+1-(-jdel))/numthreads);
+	#pragma omp parallel \
+		private(i,j,k,tid,threadstart,threadfinish,cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ctop,dtij,ndt_private, \
+				geom, state_l, state_r, p_l, p_r, F_l, F_r, U_l, U_r )
+	{
+    tid = omp_get_thread_num();
+	threadstart = -jdel+tid*rows_per_thread;
+	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
+	ndt_private = ndt;
+	//ZSLOOP(-jdel,N1,-idel,N2) {
+	//for(i=-jdel;i<=N1;i++) {
+	//  for(j=-idel;j<=N2;j++) {
+	for(i=threadstart;i<threadfinish;i++) {
+	  for(j=-idel;j<=N2;j++) {
+
+
+		/* this avoids problems on the pole */
+		if(dir == 2 && (j == 0 || j == N2)) {
+                        PLOOP F[i][j][k] = 0. ;
+		}
+		else {
+
+                PLOOP {
+                        p_l[k] = pr[i-idel][j-jdel][k] 
+					+ 0.5*dq[i-idel][j-jdel][k] ;
+                        p_r[k] = pr[i][j][k]   
+					- 0.5*dq[i][j][k] ;
+                }
+
+		get_geometry(i,j,face,&geom) ;
+
+#if(RESCALE)
+		rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
+		rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
+#endif //RESCALE
+		get_state(p_l,&geom,&state_l) ;
+		get_state(p_r,&geom,&state_r) ;
+		
+		primtoflux(p_l,&state_l,dir,&geom,F_l) ;
+		primtoflux(p_r,&state_r,dir,&geom,F_r) ;
+
+		primtoflux(p_l,&state_l,TT, &geom,U_l) ;
+		primtoflux(p_r,&state_r,TT, &geom,U_r) ;
+
+		vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
+		vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
+
+		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
+		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
+		ctop = MY_MAX(cmax,cmin) ;
+
+
+		PLOOP F[i][j][k] = 
+			HLLF*(
+			(cmax*F_l[k] + cmin*F_r[k] 
+				- cmax*cmin*(U_r[k] - U_l[k]))/
+					(cmax + cmin + SMALL) 
+			) +
+			LAXF*(
+			0.5*(F_l[k] + F_r[k] 
+				- ctop*(U_r[k] - U_l[k])) 
+			) ;
+
+                /* evaluate restriction on timestep */
+                cmax = MY_MAX(cmax,cmin) ;
+                dtij = cour*dx[dir]/cmax ;
+
+		if(dtij < ndt_private) ndt_private = dtij ;
+		}
+	  }
+	}
+
+	#pragma omp critical
+	{
+	if(ndt_private < ndt) ndt = ndt_private ;
+	}// end omp critical
+
+	} //end omp parallel
+
+
+
 
 #if(RESCALE)
 	#pragma omp parallel for \
@@ -538,8 +622,16 @@ void init_mpi_omp(int argc, char *argv[])
 {
 	//MPI_Init(&argc, &argv);
 	//MPI_Comm_size(MPI_COMM_WORLD,&numranks);
-	printf("Threads requested: %d\n", NUMTHREADS);
-	omp_set_num_threads(NUMTHREADS); //TODO
+
+	if (argc > 1) {
+		numthreads = atoi(argv[1]);
+	} else {
+		numthreads = MAXTHREADS;
+	}
+
+	printf("Threads requested: %d\n", numthreads);
+	omp_set_num_threads(numthreads);
+
 
 #if(TIMING_COMPARISON)
 	tot_time_flux_dq = 0;
@@ -604,14 +696,14 @@ double fluxcalc_1(
 	startTime(&tOMP);
 #endif //TIMING_COMPARISON
 
-	rows_per_thread = ceil(((float)N1+4)/NUMTHREADS);
+	rows_per_thread = ceil(((float)N1+4)/numthreads);
 	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish)
 	{
 	struct of_geom mygeom;  //TODO is this best
     tid = omp_get_thread_num();
 	threadstart = -2+tid*rows_per_thread;
 	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
-	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),NUMTHREADS,threadstart,threadfinish);
+	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),numthreads,threadstart,threadfinish);
 
 	/** evaluate slopes of primitive variables **/
 	/* first rescale */
@@ -732,8 +824,8 @@ double fluxcalc_1(
 
 	ndt = 1.e9;
 	// omp_set_dynamic(0);
-	rows_per_thread = ceil(((float)N1+1-(-jdel))/NUMTHREADS);
-	//printf("threads requested %d, rows_per_thread %d, begin: %d, end: %d\n", NUMTHREADS, rows_per_thread, -jdel, N1+1);
+	rows_per_thread = ceil(((float)N1+1-(-jdel))/numthreads);
+	//printf("threads requested %d, rows_per_thread %d, begin: %d, end: %d\n", numthreads, rows_per_thread, -jdel, N1+1);
 	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish,cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ctop,dtij)
 	{
 	struct of_geom mygeom;  //TODO is this best
@@ -742,7 +834,7 @@ double fluxcalc_1(
     tid = omp_get_thread_num();
 	threadstart = -jdel+tid*rows_per_thread;
 	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
-	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),NUMTHREADS,threadstart,threadfinish);
+	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),numthreads,threadstart,threadfinish);
 
 	//ZSLOOP(-jdel,N1,-idel,N2) {
 	//for(i=-jdel;i<=N1;i++) {
@@ -901,14 +993,14 @@ double fluxcalc_1(
 	startTime(&tOMP);
 #endif //TIMING_COMPARISON
 
-	rows_per_thread = ceil(((float)N1+4)/NUMTHREADS);
+	rows_per_thread = ceil(((float)N1+4)/numthreads);
 	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish)
 	{
 	struct of_geom mygeom;  //TODO is this best
     tid = omp_get_thread_num();
 	threadstart = -2+tid*rows_per_thread;
 	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
-	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),NUMTHREADS,threadstart,threadfinish);
+	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),numthreads,threadstart,threadfinish);
 
 	/** evaluate slopes of primitive variables **/
 	/* first rescale */
@@ -1000,7 +1092,7 @@ double fluxcalc_2(
 
 #if(RESCALE)
 	//TODO figure out what to do with rows_per_thread
-	rows_per_thread = ceil(((float)N1+4)/NUMTHREADS);
+	rows_per_thread = ceil(((float)N1+4)/numthreads);
 	threadstart = -2+tid*rows_per_thread;
 	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
 
@@ -1019,7 +1111,7 @@ double fluxcalc_2(
 #endif //RESCALE
 
 	/* then evaluate slopes */
-	rows_per_thread = ceil(((float)N1+2)/NUMTHREADS);
+	rows_per_thread = ceil(((float)N1+2)/numthreads);
 	threadstart = -1+tid*rows_per_thread;
 	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
 	//ZSLOOP(-1,N1,-1,N2) {
@@ -1043,7 +1135,7 @@ double fluxcalc_2(
 	}
 
 #pragma omp barrier
-	rows_per_thread = ceil(((float)N1+1-(-jdel))/NUMTHREADS);
+	rows_per_thread = ceil(((float)N1+1-(-jdel))/numthreads);
 	struct of_state mystate_l,mystate_r;  //TODO is this best?
 	double myp_l[NPR],myp_r[NPR],myF_l[NPR],myF_r[NPR],myU_l[NPR],myU_r[NPR]; //TODO is this best?
 	threadstart = -jdel+tid*rows_per_thread;
@@ -1117,7 +1209,7 @@ double fluxcalc_2(
 
 #if(RESCALE)
 #pragma omp barrier
-	rows_per_thread = ceil(((float)N1+4)/NUMTHREADS);
+	rows_per_thread = ceil(((float)N1+4)/numthreads);
 	threadstart = -2+tid*rows_per_thread;
 	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
 

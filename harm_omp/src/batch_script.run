@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l walltime=00:02:59
+#PBS -l walltime=00:05:59
 #PBS -l nodes=1:ppn=12
 #PBS -N harm
 #PBS -j oe
@@ -18,7 +18,11 @@ echo "=======================================================================" >
 echo $'\r' >> ${out_filename}
 
 echo "Running harm..." >> ${out_filename}
-./harm >> ${out_filename}
+
+for threads in 1 2 4 8 12
+do
+	./harm $threads >> ${out_filename}
+done
 echo " "
 echo $'\r' >> ${out_filename}
 
