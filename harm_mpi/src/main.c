@@ -79,9 +79,9 @@ int main(int argc,char *argv[])
 	if(WorldRank == 0)
 		system("mkdir -p dumps images");  
     
-//	if(!restart_init()) { 
+	if(!restart_init()) {
 		init() ;
-//	} 
+	}
 
 	/* do initial diagnostics */
 	diag(INIT_OUT) ;
@@ -118,19 +118,18 @@ int main(int argc,char *argv[])
 
 		/* restart dump */
 		nstep++ ;
-//		if(nstep%DTr == 0) 
-//			restart_write() ;
+		if(nstep%DTr == 0)
+			restart_write() ; // this is a barrier
 
 
 		/* deal with failed timestep, though we usually exit upon failure */
-//		if(failed) {
-//			restart_init() ;
-//			failed = 0 ;
-//			nfailed = nstep ;
-//			defcon = 0.3 ;
-//		}
+		if (failed) {
+			restart_init() ;
+			failed = 0 ;
+			nfailed = nstep ;
+			defcon = 0.3 ;
+		}
 		if(nstep > nfailed + DTr*4.*(1 + 1./defcon)) defcon = 1. ;
-
 
 	}
 
@@ -140,7 +139,7 @@ int main(int argc,char *argv[])
 	/* do final diagnostics */
 	diag(FINAL_OUT) ;
 
-    clean_up();
+  clean_up();
 	return(0) ;
 }
 
@@ -288,6 +287,18 @@ void init_mpi(int *argc, char*** argv)
     MPI_Type_commit(&i_row_type);
     
     halo_count = 0;
+
+    // Custom types for printing restart files
+    MPI_Type_contiguous(NPR*CHARSPERNUM, MPI_CHAR, &array_as_string);
+    MPI_Type_commit(&array_as_string);
+
+    int globalsizes[2] = {(N1+4)*NumRows, (N2+4)*NumCols};
+    int localsizes[2]  = {N1+4, N2+4};
+    int starts[2]      = {(N1+4)*RowRank, (N2+4)*ColRank};
+    int order          = MPI_ORDER_C;
+    MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order,
+                             array_as_string, &local_array);
+    MPI_Type_commit(&local_array);
 }
 
 /*****************************************************************
