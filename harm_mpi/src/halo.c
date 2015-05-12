@@ -297,7 +297,7 @@ void print_npr(double (** pv)[NPR], int val) {
     }
 }
 
-void print_npr(double (** pv)[NPR], int val) {
+void print_npr2(double (** pv)[NPR], int val) {
     double (*** tmp)[NPR];
     int i, j, r, c;
 
@@ -311,6 +311,7 @@ void print_npr(double (** pv)[NPR], int val) {
     }
     fflush(stderr);
     fflush(stdout);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     for(r= 0; r < NumRows; r++) {
         for(c = 0; c < NumCols; c++) {
@@ -332,16 +333,51 @@ void print_npr(double (** pv)[NPR], int val) {
         }
         if(WorldRank == 0) {
             fflush(stdout);
-            for(i = 0; i < N1+4; i++) {
-                for(c = 0; c < NumCols; c++) {
-                    for(j = 0; j < N2+4; j++) {
+            if(r == 0) {
+                // Print first 2 rows
+                for(i = 0; i < 2; i++) {
+                    // Print first 2 columns
+                    printf("%e\t%e\t", tmp[0][i][0][val], tmp[0][i][1][val]);
+                    // Print N2 columns
+                    for(c = 0; c < NumCols; c++) {
+                        for(j = 2; j < N2+2; j++) {
                             printf("%e\t", tmp[c][i][j][val]);
+                        }
                     }
-                    printf("\t");
+                    // Print last 2 columns
+                    printf("%e\t%e\n", tmp[NumCols-1][i][N2+2][val], tmp[NumCols-1][i][N2+3][val]);
+                }
+            }
+            // Print N1 rows
+            for(i = 2; i < N1+2; i++) {
+                // Print first 2 columns
+                printf("%e\t%e\t", tmp[0][i][0][val], tmp[0][i][1][val]);
+                // Print N2 columns
+                for(c = 0; c < NumCols; c++) {
+                    for(j = 2; j < N2+2; j++) {
+                        printf("%e\t", tmp[c][i][j][val]);
+                    }
+                }
+                // Print last 2 columns
+                printf("%e\t%e\n", tmp[NumCols-1][i][N2+2][val], tmp[NumCols-1][i][N2+3][val]);
+            }
+
+            if(r == (NumRows -1)){
+                // Print last 2 rows
+                for(i = N1+2; i < N1+4; i++) {
+                    // Print first 2 columns
+                    printf("%e\t%e\t", tmp[0][i][0][val], tmp[0][i][1][val]);
+                    // Print N2 columns
+                    for(c = 0; c < NumCols; c++) {
+                        for(j = 2; j < N2+2; j++) {
+                            printf("%e\t", tmp[c][i][j][val]);
+                        }
+                    }
+                    // Print last 2 columns
+                    printf("%e\t%e\n", tmp[NumCols-1][i][N2+2][val], tmp[NumCols-1][i][N2+3][val]);
                 }
                 printf("\n");
             }
-            printf("\n");
             fflush(stdout);
         }
     }

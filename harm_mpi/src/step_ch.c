@@ -87,15 +87,10 @@ void step_ch()
         fprintf(stderr,"h") ;
     ndt = advance(p, p, 0.5*dt, ph) ;   /* time step primitive variables to the half step */
 
-    //print_npr(ph, RHO);
     fixup(ph) ;         /* Set updated densities to floor, set limit for gamma */
-    //print_npr(ph, RHO);
     bound_prim(ph) ;    /* Set boundary conditions for primitive variables, flag bad ghost zones */
-    //print_npr(ph, RHO);
     fixup_utoprim(ph);  /* Fix the failure points using interpolation and updated ghost zone values */
-    //print_npr(ph, RHO);
     bound_prim(ph) ;    /* Reset boundary conditions with fixed up points */
-    //print_npr(ph, RHO);
 
     /* Repeat and rinse for the full time (aka corrector) step:  */
     if(WorldRank == 0)
@@ -103,15 +98,10 @@ void step_ch()
     ZLOOP PLOOP psave[i][j][k] = p[i][j][k] ;
     
     ndt = advance(p, ph, dt,    p) ;
-    //print_npr(p, RHO);
     fixup(p) ;
-    //print_npr(p, RHO);
     bound_prim(p) ;
-    //print_npr(p, RHO);
     fixup_utoprim(p);
-    //print_npr(p, RHO);
     bound_prim(p) ;
-    //print_npr(p, RHO);
 
 
     /* Determine next time increment based on current characteristic speeds: */
@@ -163,17 +153,15 @@ double advance(
         fprintf(stderr,"0") ;
 
     ndt1 = fluxcalc(pb, F1, 1) ;
-    //print_npr(F1, RHO);
     ndt2 = fluxcalc(pb, F2, 2) ;
 
     fix_flux(F1,F2) ;
-    //print_npr(F1, RHO);
 
     flux_ct(F1,F2) ;
-    //print_npr(F1, RHO);
 
     /* evaluate diagnostics based on fluxes */
     diag_flux(F1,F2) ;
+
 
     if(WorldRank == 0)
         fprintf(stderr,"1") ;
@@ -220,8 +208,6 @@ double advance(
     if(WorldRank == 0)
         fprintf(stderr,"2") ;
 
-    //print_npr(F1, RHO);
-    //print_npr(F2, RHO);
     return(ndt) ;
 }
 
@@ -327,7 +313,7 @@ double fluxcalc(
             cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
             cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
             ctop = MY_MAX(cmax,cmin) ;
-
+            
 
             PLOOP F[i][j][k] = 
                 HLLF*(
@@ -347,7 +333,7 @@ double fluxcalc(
 
         }
     }
-
+    
     // Halo exchange: F, 2 [NEEDED]
     halo_npr(F);
 

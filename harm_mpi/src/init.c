@@ -163,7 +163,6 @@ void init()
         else
             lnh = 1. ;
 
-
         /* regions outside torus */
         if(lnh < 0. || r < rin) {
             rho = 1.e-7*RHOMIN ;
@@ -204,7 +203,7 @@ void init()
             u = kappa*pow(rho,gam)/(gam - 1.) ;
             ur = 0. ;
             uh = 0. ;
-
+            
             /* calculate u^phi */
             expm2chi = SS*SS*DD/(AA*AA*sth*sth) ;
             up1 = sqrt((-1. + sqrt(1. + 4.*l*l*expm2chi))/2.) ;
@@ -220,7 +219,7 @@ void init()
             p[i][j][U2] = uh ;
 
             p[i][j][U3] = up ;
-
+            
             /* convert from 4-vel to 3-vel */
             coord_transform(p[i][j],i,j) ;
         }
@@ -230,8 +229,6 @@ void init()
         p[i][j][B3] = 0. ;
 
     }
-
-
 
     // Globally maximize rhomax, umax
     lmax[0] = rhomax; lmax[1] = umax;
@@ -248,6 +245,7 @@ void init()
     }
     umax /= rhomax ;
     rhomax = 1. ;
+    
 
     // Halo exchange p [ deferred as fixup does that for us! ]
     fixup(p) ;

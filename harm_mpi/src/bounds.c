@@ -54,9 +54,12 @@ void bound_prim( double (** prim)[NPR] )
         void inflow_check(double *pr, int ii, int jj, int type );
         struct of_geom geom ;
 
+        int ll, lu;
         /* inner r boundary condition: u, gdet extrapolation */
         if(RowRank == 0) {
-            for(j=0;j<N2;j++) {
+            ll = (ColRank == 0)? 0 : -2;
+            lu = (ColRank == (NumCols-1))? N2 : N2+2;
+            for(j=ll; j < lu; j++) {
 #if( RESCALE )
                 get_geometry(0,j,CENT,&geom) ;
                 rescale(prim[0][j],FORWARD, 1, 0,j,CENT,&geom) ;
@@ -80,7 +83,9 @@ void bound_prim( double (** prim)[NPR] )
 
         /* outer r BC: outflow */
         if(RowRank == (NumRows - 1)) {
-            for(j=0;j<N2;j++) {
+            ll = (ColRank == 0)? 0 : -2;
+            lu = (ColRank == (NumCols-1))? N2 : N2+2;
+            for(j=ll;j<lu;j++) {
 #if( RESCALE )
                 get_geometry(N1-1,j,CENT,&geom) ;
                 rescale(prim[N1-1][j],FORWARD, 1, N1-1,j,CENT,&geom) ;
@@ -158,6 +163,8 @@ void bound_prim( double (** prim)[NPR] )
                 }
             }
         }
+
+        //halo_npr(prim);
 }
 
 void inflow_check(double *pr, int ii, int jj, int type )

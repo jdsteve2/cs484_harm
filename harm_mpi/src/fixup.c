@@ -226,6 +226,9 @@ void fixup_utoprim( double (** pv)[NPR] )
 ***********************************************************************/
 void set_Katm( void )
 {
+    fflush(stderr);
+    fflush(stdout);
+    MPI_Barrier(MPI_COMM_WORLD);
     if(ColRank == 0) {
         int i, j, k, G_type ;
         double prim[NPR], G_tmp;

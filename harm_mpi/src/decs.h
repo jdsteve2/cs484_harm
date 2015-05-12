@@ -475,3 +475,4 @@ void clean_up();
 void halo_npr(double (** pv)[NPR]);
 void halo_pflag();
 void print_npr(double (** pv)[NPR], int val);
+void print_npr2(double (** pv)[NPR], int val);
