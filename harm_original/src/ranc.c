@@ -92,8 +92,8 @@ double ranc(int iseed)
 	}
     }
 
-    n = S[n] & ( NRANC - 1 ) ;
-    S[n] = ( S[n] * a[n] ) % P[n] ;
+//    n = S[n] & ( NRANC - 1 ) ;
+//    S[n] = ( S[n] * a[n] ) % P[n] ;
     return (double) S[n] / (double) P[n] ;
 }
 

@@ -182,7 +182,7 @@ int restart_init()
 
     if ( (fp0 == NULL) && (fp1 == NULL) ) {
       fprintf(stderr,"No restart file\n") ;
-      return(0) ;
+      sprintf(filename, "");
     }
     else {
       fprintf(stderr,"\nRestart file exists! \n") ;
@@ -205,6 +205,13 @@ int restart_init()
         }
       }
     }
+  }
+
+ 
+  MPI_Bcast(filename, 20, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+  if(!strcmp(filename, "")) {
+      return(0) ;
   }
 
   /********************************************************************
