@@ -162,6 +162,7 @@ double advance(
     /* evaluate diagnostics based on fluxes */
     diag_flux(F1,F2) ;
 
+
     if(WorldRank == 0)
         fprintf(stderr,"1") ;
 
@@ -199,7 +200,7 @@ double advance(
 
     }
 
-    // MPI Halo exchange: pf, pflag
+    // Halo exchange: pf, pflag
     // Deferred as fixup called next does it for us
 
     ndt = defcon * 1./(1./ndt1 + 1./ndt2) ;
@@ -238,6 +239,7 @@ double fluxcalc(
     struct of_state state_l,state_r ;
     void rescale(double *pr, int which, int dir, int ii, int jj, int face, struct of_geom *geom) ;
     double bsq ;
+    double lmin, gmin;
 
     if     (dir == 1) {idel = 1; jdel = 0; face = FACE1;}
     else if(dir == 2) {idel = 0; jdel = 1; face = FACE2;}
@@ -250,11 +252,10 @@ double fluxcalc(
         get_geometry(i,j,CENT,&geom) ;
         rescale(pr[i][j],FORWARD, dir, i,j,CENT,&geom) ;
     }
-    // MPI Halo Exchange: pr, 2
+    // Halo Exchange: pr, 2
     // Assuming pr was initially correct, no need for Halo exchange
 #endif
     /* then evaluate slopes */
-    // TODO: Only evaluate ZLOOP and add extra for bounding box, perhaps
     ZSLOOP(-1,N1,-1,N2) PLOOP {
         //-new get_geometry(i,j,CENT,&geom) ;
         //-new bsq = bsq_calc(pr[i][j],&geom) ;
@@ -269,11 +270,13 @@ double fluxcalc(
                 ) ;
     }
 
-    // MPI Halo Exchange dq, 1 (or 2 if above TODO is done)
-    // since pr is correct, one layer is correctly computed need to exchange second layer
-    // No need if below loop is corrected to only do relevant blocks TODO (only one of the two)
+    // Halo Exchange dq, 1
+    // since pr is correct, one layer is correctly computed
+    // No need
 
     ndt = 1.e9 ;
+    // below loop computes extra
+    // Can be corrected to only do relevant blocks TODO
     ZSLOOP(-jdel,N1,-idel,N2) {
 
         /* this avoids problems on the pole */
@@ -310,7 +313,7 @@ double fluxcalc(
             cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
             cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
             ctop = MY_MAX(cmax,cmin) ;
-
+            
 
             PLOOP F[i][j][k] = 
                 HLLF*(
@@ -330,10 +333,14 @@ double fluxcalc(
 
         }
     }
+    
+    // Halo exchange: F, 2 [NEEDED]
+    halo_npr(F);
 
-    // MPI Halo exchange: F, 2 [NEEDED]
-
-    // MPI Allreduce: ndt, min
+    // Allreduce: ndt, min
+    lmin = ndt;
+    MPI_Allreduce(&lmin, &gmin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    ndt = gmin;
 
 #if(RESCALE)
     ZSLOOP(-2,N1+1,-2,N2+1) {
@@ -363,7 +370,7 @@ void flux_ct(double (** F1)[NPR], double (** F2)[NPR])
     ZSLOOP(0,N1,0,N2) emf[i][j] = 0.25*(F1[i][j][B2] + F1[i][j-1][B2]
             - F2[i][j][B1] - F2[i-1][j][B1]) ;
 
-    // MPI Halo exchange: emf, 1
+    // Halo exchange: emf, 1
     // No need as we are recomputing the exact same values
 
     /* rewrite EMFs as fluxes, after Toth */
@@ -376,7 +383,9 @@ void flux_ct(double (** F1)[NPR], double (** F2)[NPR])
         F2[i][j][B2] = 0. ;
     }
 
-    // MPI Halo exchange: F1 and F2, 2 [NEEDED]
+    // Halo exchange: F1 and F2, 2 [NEEDED]
+    halo_npr(F1);
+    halo_npr(F2);
 }
 
 

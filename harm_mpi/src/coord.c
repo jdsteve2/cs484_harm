@@ -187,7 +187,7 @@ void fix_flux(double (** F1)[NPR], double (** F2)[NPR])
         }
     }
 
-    // MPI Halo exchange: Fixed so there is no need for it
+    // Halo exchange: Fixed so there is no need for it
 /*	
 	for(j=-1;j<N2;j++) {
 	  if(F1[0 ][j][RHO]>0) F1[0 ][j][RHO]=0;
@@ -213,21 +213,21 @@ void fix_flux(double (** F1)[NPR], double (** F2)[NPR])
     // fix bottom border
     if(RowRank == (NumRows - 1)) {
         for(j=-1;j<N2;j++) {
-            if(F1[N1][j][RHO]>0) F1[N1][j][RHO]=0;
+            if(F1[N1][j][RHO]<0) F1[N1][j][RHO]=0;
         }
 
         if(ColRank > 0) {
             // fix left to avoid halo exchange
-            if(F1[N1][-2][RHO]>0) F1[N1][-2][RHO]=0;
+            if(F1[N1][-2][RHO]<0) F1[N1][-2][RHO]=0;
         }
         if(ColRank < (NumCols - 1)) {
             // fix right to avoid halo exchange
-            if(F1[N1][N2][RHO]>0) F1[N1][N2][RHO]=0;
-            if(F1[N1][N2+1][RHO]>0) F1[N1][N2+1][RHO]=0;
+            if(F1[N1][N2][RHO]<0) F1[N1][N2][RHO]=0;
+            if(F1[N1][N2+1][RHO]<0) F1[N1][N2+1][RHO]=0;
         }
     }
     
-    // MPI Halo exchange: Fixed so there is no need for it
+    // Halo exchange: Fixed so there is no need for it
 
 	return;
 }

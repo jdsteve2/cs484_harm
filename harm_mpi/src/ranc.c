@@ -53,7 +53,8 @@
 #include <time.h>
 
 #define NRANC 64
-#define RND	( 0x7fff & rand() )
+//#define RND	( 0x7fff & rand() )
+#define RND	( 0x7fff & 999 )
 #define MIN	( 2 << 8 )
 
     static int P[NRANC] = {
@@ -91,8 +92,8 @@ double ranc(int iseed)
 	}
     }
 
-    n = S[n] & ( NRANC - 1 ) ;
-    S[n] = ( S[n] * a[n] ) % P[n] ;
+    //n = S[n] & ( NRANC - 1 ) ;
+    //S[n] = ( S[n] * a[n] ) % P[n] ;
     return (double) S[n] / (double) P[n] ;
 }
 

@@ -56,6 +56,12 @@ int call_code ;
 	struct of_geom geom ;
 	struct of_state q ;
 	int imax,jmax ;
+    double lred[3], gred[3];
+    int tmp[2];
+    struct {
+        double d;
+        int i;
+    } ldi, gdi;
 
 	static double e_init,m_init ;
 	static FILE *ener_file ;
@@ -105,15 +111,35 @@ int call_code ;
 				- p[i-1][j-1][B2]*gdet[i-1][j-1][CENT]
 				)/dx[2]) ;
 
-			if(divb > divbmax && i > 0 && j > 0) {
+			if(divb > divbmax && ((RowRank*N1 + i) > 0) && ((ColRank*N2 + j) > 0)) {
 				imax = i ;
 				jmax = j ;
 				divbmax = divb ;
 			}
 		}
 
-        // MPI Reduce: imax, jmax, divbmax such that i and j correspond to divbmax (to zero)
-        // MPI Reduce: rmed, pp, e : sum (to zero)
+        // Reduce: imax, jmax, divbmax such that i and j correspond to divbmax (to zero)
+        ldi.d = divbmax;
+        ldi.i = WorldRank;
+        MPI_Allreduce(&ldi, &gdi, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+        if(gdi.i != 0) {
+            if(WorldRank == 0) {
+                MPI_Recv(tmp, 2, MPI_INT, gdi.i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                divbmax = gdi.d;
+                imax = tmp[0];
+                jmax = tmp[1];
+            }
+            if(WorldRank == gdi.i) {
+                tmp[0] = RowRank*N1 + imax;
+                tmp[1] = ColRank*N2 + jmax;
+                MPI_Send(tmp, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            }
+        }
+        
+        // Reduce: rmed, pp, e : sum (to zero)
+        lred[0] = rmed; lred[1] = pp; lred[2] = e;
+        MPI_Reduce(lred, gred, 3, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        rmed = gred[0]; pp = gred[1]; e = gred[2];
 	}
 
 	if(call_code == INIT_OUT) {
@@ -154,22 +180,14 @@ int call_code ;
 	   call_code == DUMP_OUT ||
 	   call_code == FINAL_OUT) {
 
-        // MPI Concurrent Write Dump
-
 		/* make regular dump file */
-		sprintf(dfnam,"dumps/dump%03d",dump_cnt) ;
-		fprintf(stderr,"DUMP     file=%s\n",dfnam) ;
-		dump_file = fopen(dfnam,"w") ;
+    if (WorldRank == 0) {
+        sprintf(dfnam, "dumps/dump%03d", dump_cnt) ;
+        fprintf(stderr, "DUMP     file=%s\n", dfnam) ;
+    }
 
-		if(dump_file==NULL) {
-			fprintf(stderr,"error opening dump file\n") ;
-			exit(2) ;
-		}
-
-		dump(dump_file) ;
-		fclose(dump_file) ;
-
-		dump_cnt++ ;
+		dump(dfnam);
+		dump_cnt++;
 	}
 	
 	/* image dump at regular intervals */
@@ -177,8 +195,8 @@ int call_code ;
 	   call_code == INIT_OUT ||
 	   call_code == FINAL_OUT) {
 
-        // MPI Concurrent Write Image
-		image_all( image_cnt );
+        // TODO: MPI Concurrent Write Image
+//		image_all( image_cnt );
 
 		image_cnt++ ;
 	}
@@ -244,6 +262,7 @@ void area_map(int i, int j, double (** prim)[NPR])
 void diag_flux(double (** F1)[NPR], double (** F2)[NPR])
 {
 	int j ;
+    double lsum[3], gsum[3];
 
         mdot = edot = ldot = 0. ;
         if(RowRank == 0) {
@@ -252,8 +271,12 @@ void diag_flux(double (** F1)[NPR], double (** F2)[NPR])
                 edot -= (F1[0][j][UU] - F1[0][j][RHO])*2.*M_PI*dx[2] ;
                 ldot += F1[0][j][U3] *2.*M_PI*dx[2] ;
             }
-            // MPI Reduce mdot, edot, ldot : sum (To zero, only used for print above)
+            // Reduce mdot, edot, ldot : sum (To zero, only used for print above)
             // Only in CommRow
+            lsum[0] = mdot;
+            lsum[1] = edot;
+            lsum[2] = ldot;
+            MPI_Reduce(lsum, gsum, 3, MPI_DOUBLE, MPI_SUM, 0, CommRow);
+            // FIXME: Assign gsum to mdot, edot and ldot, right?
         }
 }
-
