@@ -119,23 +119,23 @@ void halo_pflag()
     num_req = 0;
     if(RowRank > 0) {
         // Receive rows -2 & -1 from (RowRank - 1) on CommCol
-        MPI_Irecv(&pflag[-2][-2], 1, d_row_type, (RowRank - 1),
+        MPI_Irecv(&(pflag[-2][-2]), 1, i_row_type, (RowRank - 1),
                 halo_count, CommCol, &req[num_req++]);
     }
     if(RowRank < (NumRows - 1)) {
         // Receive rows N1 & N1+1 from (RowRank + 1) on CommCol
-        MPI_Irecv(&pflag[N1][-2], 1, d_row_type, (RowRank + 1),
+        MPI_Irecv(&(pflag[N1][-2]), 1, i_row_type, (RowRank + 1),
                 halo_count, CommCol, &req[num_req++]);
     }
 
     if(RowRank > 0) {
         // Send rows 0 & 1 to (RowRank - 1) on CommCol
-        MPI_Isend(&pflag[0][-2], 1, d_row_type, (RowRank - 1),
+        MPI_Isend(&(pflag[0][-2]), 1, i_row_type, (RowRank - 1),
                 halo_count, CommCol, &req[num_req++]);
     }
     if(RowRank < (NumRows - 1)) {
         // Send rows 0 & 1 to (RowRank - 1) on CommCol
-        MPI_Isend(&pflag[N1-2][-2], 1, d_row_type, (RowRank + 1),
+        MPI_Isend(&(pflag[N1-2][-2]), 1, i_row_type, (RowRank + 1),
                 halo_count, CommCol, &req[num_req++]);
     }
     MPI_Waitall(num_req, req, sts);
@@ -146,23 +146,23 @@ void halo_pflag()
     num_req = 0;
     if(ColRank > 0) {
         // Receive cols -2 & -1 from (ColRank - 1) on CommRow
-        MPI_Irecv(&pflag[-2][-2], 1, d_col_type, (ColRank - 1),
+        MPI_Irecv(&(pflag[-2][-2]), 1, i_col_type, (ColRank - 1),
                 halo_count, CommRow, &req[num_req++]);
     }
     if(ColRank < (NumCols - 1)) {
         // Receive cols N2 & N2+1 from (ColRank + 1) on CommRow
-        MPI_Irecv(&pflag[-2][N2], 1, d_col_type, (ColRank + 1),
+        MPI_Irecv(&(pflag[-2][N2]), 1, i_col_type, (ColRank + 1),
                 halo_count, CommRow, &req[num_req++]);
     }
     
     if(ColRank > 0) {
         // Send cols 0 & 1 to (ColRank - 1) on CommRow
-        MPI_Isend(&pflag[-2][0], 1, d_col_type, (ColRank - 1),
+        MPI_Isend(&(pflag[-2][0]), 1, i_col_type, (ColRank - 1),
                 halo_count, CommRow, &req[num_req++]);
     }
     if(ColRank < (NumCols - 1)) {
         // Send cols N2-2 & N2-1 to (ColRank + 1) on CommRow
-        MPI_Isend(&pflag[-2][N2-2], 1, d_col_type, (ColRank + 1),
+        MPI_Isend(&(pflag[-2][N2-2]), 1, i_col_type, (ColRank + 1),
                 halo_count, CommRow, &req[num_req++]);
     }
     MPI_Waitall(num_req, req, sts);

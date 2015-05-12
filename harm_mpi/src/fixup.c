@@ -59,7 +59,7 @@ void fixup(double (** pv)[NPR])
 
   // Halo exchange: pv, pflag, 2
   halo_npr(pv);
-  //halo_pflag();
+  halo_pflag();
 }
 
 void fixup1zone( int i, int j, double pv[NPR] ) 
@@ -205,6 +205,9 @@ void fixup_utoprim( double (** pv)[NPR] )
       fixup1zone( i, j, pv[i][j] ) ;  /* Floor and limit gamma the interpolated value */
     }
   }
+
+  halo_npr(pv);
+  halo_pflag();
 
   return;
 }
