@@ -287,6 +287,6 @@ void diag_flux(double (** F1)[NPR], double (** F2)[NPR])
             lsum[1] = edot;
             lsum[2] = ldot;
             MPI_Reduce(lsum, gsum, 3, MPI_DOUBLE, MPI_SUM, 0, CommRow);
+            // FIXME: Assign gsum to mdot, edot and ldot, right?
         }
 }
-

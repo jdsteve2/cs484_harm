@@ -98,7 +98,11 @@
 #define FMT_DBL_OUT "%28.18e"
 #define FMT_INT_OUT "%10d"
 
-
+/* Restart file stuff */
+#define CHARSPERNUM 29
+#define FMT_RST "%28.18e "
+#define ENDFMT_RST "%28.18e\n"
+#define SEEK_DISP (454)
 
 /*************************************************************************
     MNEMONICS SECTION 
@@ -307,6 +311,8 @@ extern MPI_Comm Comm2D, CommRow, CommCol;
 
 extern MPI_Datatype d_col_type, d_row_type;
 extern MPI_Datatype i_col_type, i_row_type;
+extern MPI_Datatype array_as_string;
+extern MPI_Datatype local_array;
 
 extern int halo_count;
 
@@ -443,7 +449,7 @@ void raise(double *v1, struct of_geom *geom, double *v2) ;
 void rescale(double *pr, int which, int dir, int ii, int jj, int face, 
 			struct of_geom *geom) ;
 void restart_write(void) ;
-void restart_read(FILE *fp) ;
+void restart_read(char *filename) ;
 void set_arrays(void) ;
 void set_grid(void) ;
 void set_points(void) ;
