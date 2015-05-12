@@ -175,7 +175,7 @@
 #define TIMING_COMPARISON		(0)
 
 /* For OMP+MPI */
-#define NUMTHREADS	(12)
+#define MAXTHREADS	(12)
 
 /*************************************************************************
     GLOBAL ARRAY SECTION 
@@ -243,6 +243,7 @@ extern int    nstroke ;
 
 /* MPI+OMP */
 extern int numranks ;
+extern int numthreads ;
 
 /* testing and timing */
 #if(TIMING_COMPARISON)

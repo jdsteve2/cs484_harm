@@ -111,6 +111,7 @@ int    nstroke ;
 
 /* MPI+OMP */
 int numranks ;
+int numthreads ;
 
 /* testing and timing */
 #if(TIMING_COMPARISON)
