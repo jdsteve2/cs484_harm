@@ -420,7 +420,7 @@ void conn_func(double *X, struct of_geom *geom, double lconn[][NDIM][NDIM]) ;
 void coord(int i, int j, int loc, double *X) ;
 void diag(int call_code) ;
 void diag_flux(double (** F1)[NPR], double (** F2)[NPR]) ;
-void dump(FILE *fp) ;
+void dump(char *filename) ;
 
 void fail(int fail_type) ;
 void fixup(double (** pv)[NPR]) ;

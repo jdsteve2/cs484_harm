@@ -44,7 +44,7 @@
 
 #include "decs.h"
 
-void dump(FILE *fp)
+void dump(char *filename)
 {
 	int i,j,k ;
 	double divb ;
@@ -52,57 +52,83 @@ void dump(FILE *fp)
 	double r,th,vmin,vmax ;
 	struct of_geom geom ;
 	struct of_state q ;
+	FILE *fp;
+
+	MPI_File file;
+	MPI_Status status;
+	MPI_Datatype data_as_string;
+	MPI_Datatype dump_array;
 
 	/***************************************************************
-	  Write header information : 
+	  Rank 0 writes header information :
 	***************************************************************/
 
-	fprintf(fp, FMT_DBL_OUT, t        );
-	fprintf(fp, FMT_INT_OUT, N1       );
-	fprintf(fp, FMT_INT_OUT, N2       );
-	fprintf(fp, FMT_DBL_OUT, startx[1]);
-	fprintf(fp, FMT_DBL_OUT, startx[2]);
-	fprintf(fp, FMT_DBL_OUT, dx[1]    );
-	fprintf(fp, FMT_DBL_OUT, dx[2]    );
-	fprintf(fp, FMT_DBL_OUT, tf       );
-	fprintf(fp, FMT_INT_OUT, nstep    );
-	fprintf(fp, FMT_DBL_OUT, a        );
-	fprintf(fp, FMT_DBL_OUT, gam      );
-	fprintf(fp, FMT_DBL_OUT, cour     );
-	fprintf(fp, FMT_DBL_OUT, DTd      );
-	fprintf(fp, FMT_DBL_OUT, DTl      );
-	fprintf(fp, FMT_DBL_OUT, DTi      );
-	fprintf(fp, FMT_INT_OUT, DTr      );
-	fprintf(fp, FMT_INT_OUT, dump_cnt );
-	fprintf(fp, FMT_INT_OUT, image_cnt);
-	fprintf(fp, FMT_INT_OUT, rdump_cnt);
-	fprintf(fp, FMT_DBL_OUT, dt       );
-	fprintf(fp, FMT_INT_OUT, lim      );
-	fprintf(fp, FMT_INT_OUT, failed   );
-	fprintf(fp, FMT_DBL_OUT, Rin      );
-	fprintf(fp, FMT_DBL_OUT, Rout     );
-	fprintf(fp, FMT_DBL_OUT, hslope   );
-	fprintf(fp, FMT_DBL_OUT, R0       );
+	if (WorldRank == 0) {
+	  fp = fopen(filename, "w");
 
-	fprintf(fp,"\n") ;
+    fprintf(fp, FMT_DBL_OUT, t        );
+    fprintf(fp, FMT_INT_OUT, N1       );
+    fprintf(fp, FMT_INT_OUT, N2       );
+    fprintf(fp, FMT_DBL_OUT, startx[1]);
+    fprintf(fp, FMT_DBL_OUT, startx[2]);
+    fprintf(fp, FMT_DBL_OUT, dx[1]    );
+    fprintf(fp, FMT_DBL_OUT, dx[2]    );
+    fprintf(fp, FMT_DBL_OUT, tf       );
+    fprintf(fp, FMT_INT_OUT, nstep    );
+    fprintf(fp, FMT_DBL_OUT, a        );
+    fprintf(fp, FMT_DBL_OUT, gam      );
+    fprintf(fp, FMT_DBL_OUT, cour     );
+    fprintf(fp, FMT_DBL_OUT, DTd      );
+    fprintf(fp, FMT_DBL_OUT, DTl      );
+    fprintf(fp, FMT_DBL_OUT, DTi      );
+    fprintf(fp, FMT_INT_OUT, DTr      );
+    fprintf(fp, FMT_INT_OUT, dump_cnt );
+    fprintf(fp, FMT_INT_OUT, image_cnt);
+    fprintf(fp, FMT_INT_OUT, rdump_cnt);
+    fprintf(fp, FMT_DBL_OUT, dt       );
+    fprintf(fp, FMT_INT_OUT, lim      );
+    fprintf(fp, FMT_INT_OUT, failed   );
+    fprintf(fp, FMT_DBL_OUT, Rin      );
+    fprintf(fp, FMT_DBL_OUT, Rout     );
+    fprintf(fp, FMT_DBL_OUT, hslope   );
+    fprintf(fp, FMT_DBL_OUT, R0       );
+
+    fprintf(fp,"\n") ;
+    fclose(fp);
+	}
 		
 	/***************************************************************
-	  Write header information : 
+	  Write simulation information :
 	***************************************************************/
 
-	ZSLOOP(0,N1-1,0,N2-1) {
-		coord(i,j,CENT,X) ;
-		bl_coord(X,&r,&th) ;
+	int num;
+	if (!failed)
+	  num = 34;
+	else
+	  num = 13;
 
-		fprintf(fp, FMT_DBL_OUT, X[1]       );
-		fprintf(fp, FMT_DBL_OUT, X[2]       );
-		fprintf(fp, FMT_DBL_OUT, r          );
-		fprintf(fp, FMT_DBL_OUT, th         );
-		PLOOP fprintf(fp, FMT_DBL_OUT, p[i][j][k] );
+	int count = 0;
+	char *data_as_text = (char *) malloc(CHARSPERNUM*num*N1*N2*sizeof(char));
+	ZSLOOP(0, N1-1, 0, N2-1) {
+		coord(i, j, CENT, X);
+		bl_coord(X, &r, &th);
+
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, X[1]);
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, X[2]);
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, r);
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, th);
+		PLOOP sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, p[i][j][k]);
+
+//		fprintf(fp, FMT_DBL_OUT, X[1]       );
+//		fprintf(fp, FMT_DBL_OUT, X[2]       );
+//		fprintf(fp, FMT_DBL_OUT, r          );
+//		fprintf(fp, FMT_DBL_OUT, th         );
+//		PLOOP fprintf(fp, FMT_DBL_OUT, p[i][j][k] );
 		
                 /* divb flux-ct defn; corner-centered.  Use
 		   only interior corners */
-		if(i > 0 && j > 0 && i < N1 && j < N2) {
+		if(((RowRank*N1 + i) > 0) && ((ColRank*N2 + j) > 0) &&
+		   ((RowRank*N1 + i) < GlobalN1) && ((ColRank*N2 + j) < GlobalN2)) {
 			divb = fabs( 0.5*(
 				p[i][j][B1]*gdet[i][j][CENT]
 				+ p[i][j-1][B1]*gdet[i][j-1][CENT]
@@ -116,32 +142,80 @@ void dump(FILE *fp)
 				- p[i-1][j-1][B2]*gdet[i-1][j-1][CENT]
 				)/dx[2]) ;
 		}
-		else divb = 0. ;
-
-		fprintf(fp, FMT_DBL_OUT, divb     );
-
-
-		if(!failed) {
-			get_geometry(i,j,CENT,&geom) ;
-			get_state(p[i][j],&geom,&q) ;
-
-			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.ucon[k]) ;
-			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.ucov[k]) ;
-			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.bcon[k]) ;
-			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.bcov[k]) ;
-
-			vchar(p[i][j],&q,&geom,1,&vmax,&vmin) ;
-			fprintf(fp, FMT_DBL_OUT, vmin );
-			fprintf(fp, FMT_DBL_OUT, vmax );
-
-			vchar(p[i][j],&q,&geom,2,&vmax,&vmin) ;
-			fprintf(fp, FMT_DBL_OUT, vmin );
-			fprintf(fp, FMT_DBL_OUT, vmax );
-
-			fprintf(fp, FMT_DBL_OUT, geom.g );
+		else {
+		  divb = 0. ;
 		}
 
-		fprintf(fp,"\n") ;
-	}
-}
+		if (!failed)
+		  sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, divb);
+		else
+		  sprintf(&data_as_text[count++*CHARSPERNUM], ENDFMT_RST, divb);
 
+//		fprintf(fp, FMT_DBL_OUT, divb     );
+
+		if(!failed) {
+			get_geometry(i, j, CENT, &geom) ;
+			get_state(p[i][j], &geom, &q) ;
+
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.ucon[k]);
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.ucov[k]);
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.bcon[k]);
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.bcov[k]);
+//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.ucon[k]) ;
+//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.ucov[k]) ;
+//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.bcon[k]) ;
+//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.bcov[k]) ;
+
+			vchar(p[i][j], &q, &geom, 1, &vmax, &vmin);
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmin);
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmax);
+//			fprintf(fp, FMT_DBL_OUT, vmin );
+//			fprintf(fp, FMT_DBL_OUT, vmax );
+
+			vchar(p[i][j], &q, &geom, 2, &vmax, &vmin);
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmin);
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmax);
+//			fprintf(fp, FMT_DBL_OUT, vmin );
+//			fprintf(fp, FMT_DBL_OUT, vmax );
+
+			sprintf(&data_as_text[count++*CHARSPERNUM], ENDFMT_RST, geom.g);
+//			fprintf(fp, FMT_DBL_OUT, geom.g );
+		}
+
+//		fprintf(fp,"\n") ;
+	}
+
+	/*
+	 * NOTE: The following type creation has to be done every time because we
+	 * don't know what the value of 'num' will be. In most cases, it will be 34,
+	 * but when a failure occurs, it'll be 13. Since there is no way of knowing
+	 * this information during the initialization phase, we must, unfortunately,
+	 * perform this tedious calculation every single time. Hopefully, it doesn't
+	 * kill performance by too much.
+	 */
+
+	/* need a custom type for printing a whole row in one go */
+	MPI_Type_contiguous(num*CHARSPERNUM, MPI_CHAR, &data_as_string);
+	MPI_Type_commit(&data_as_string);
+
+	/* need a new type to set file view since we're looking at N1xN2 elements */
+	int globalsizes[2] = {GlobalN1, GlobalN2};
+  int localsizes[2]  = {N1, N2};
+  int starts[2]      = {N1*RowRank, N2*ColRank};
+  int order          = MPI_ORDER_C;
+  MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order,
+                           data_as_string, &dump_array);
+  MPI_Type_commit(&dump_array);
+
+	/* open the file, set the view, write data and close the file */
+  MPI_File_open(MPI_COMM_WORLD, filename,
+                MPI_MODE_APPEND,
+                MPI_INFO_NULL, &file);
+
+  MPI_File_set_view(file, 0, MPI_CHAR, dump_array, "native", MPI_INFO_NULL);
+  MPI_File_write_all(file, data_as_text, N1*N2, data_as_string, &status);
+  MPI_File_close(&file);
+
+  /* clean up */
+  free(data_as_text);
+}

@@ -140,7 +140,7 @@ void restart_write()
   free(data_as_text);
 
   /*************************************************************
-	  Everybody writes the body of the restart file:
+	  Write the body of the restart file:
   *************************************************************/
 //  ZSLOOP(-2,N1+1,-2,N2+1) {
 //    PLOOP fprintf(fp, FMT_DBL_OUT, p[i][j][k]); 

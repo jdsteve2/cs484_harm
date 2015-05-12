@@ -180,24 +180,14 @@ int call_code ;
 	   call_code == DUMP_OUT ||
 	   call_code == FINAL_OUT) {
 
-        // MPI Concurrent Write Dump
-
 		/* make regular dump file */
-        if(WorldRank == 0) {
-            sprintf(dfnam,"dumps/dump%03d",dump_cnt) ;
-            fprintf(stderr,"DUMP     file=%s\n",dfnam) ;
-        }
-	/*	dump_file = fopen(dfnam,"w") ;
+    if (WorldRank == 0) {
+        sprintf(dfnam, "dumps/dump%03d", dump_cnt) ;
+        fprintf(stderr, "DUMP     file=%s\n", dfnam) ;
+    }
 
-		if(dump_file==NULL) {
-			fprintf(stderr,"error opening dump file\n") ;
-			exit(2) ;
-		}
-
-		dump(dump_file) ;
-		fclose(dump_file) ;
-    */
-		dump_cnt++ ;
+		dump(dfnam);
+		dump_cnt++;
 	}
 	
 	/* image dump at regular intervals */
@@ -205,7 +195,7 @@ int call_code ;
 	   call_code == INIT_OUT ||
 	   call_code == FINAL_OUT) {
 
-        // MPI Concurrent Write Image
+        // TODO: MPI Concurrent Write Image
 //		image_all( image_cnt );
 
 		image_cnt++ ;
