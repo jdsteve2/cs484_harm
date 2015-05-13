@@ -257,12 +257,13 @@ void init_mpi(int *argc, char*** argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &WorldRank);
 
 	// Create 2D grid topology
+	dimsize[0] = dimsize[1] = 0;
 	MPI_Dims_create(NumProcs, 2, dimsize);
 	periodic[0] = periodic[1] = 0;	// Change if needed later on
 	MPI_Cart_create(MPI_COMM_WORLD, 2, dimsize, periodic, 0, &Comm2D);
 	MPI_Cart_coords(Comm2D, WorldRank, 2, coords);
-    NumRows = dimsize[0];
-    NumCols = dimsize[1];
+  NumRows = dimsize[0];
+  NumCols = dimsize[1];
 	RowRank = coords[0];
 	ColRank = coords[1];
 
@@ -274,31 +275,31 @@ void init_mpi(int *argc, char*** argv)
 	N1 = GlobalN1/NumRows;
 	N2 = GlobalN2/NumCols;
 
-    MPI_Type_vector(N1+4, 2*NPR, (N2+4)*NPR, MPI_DOUBLE, &d_col_type);
-    MPI_Type_commit(&d_col_type);
-    
-    MPI_Type_contiguous(2*(N2+4)*NPR, MPI_DOUBLE, &d_row_type);
-    MPI_Type_commit(&d_row_type);
+  MPI_Type_vector(N1+4, 2*NPR, (N2+4)*NPR, MPI_DOUBLE, &d_col_type);
+  MPI_Type_commit(&d_col_type);
 
-    MPI_Type_vector(N1+4, 2, N2+4, MPI_INT, &i_col_type);
-    MPI_Type_commit(&i_col_type);
-    
-    MPI_Type_contiguous(2*(N2+4), MPI_INT, &i_row_type);
-    MPI_Type_commit(&i_row_type);
-    
-    halo_count = 0;
+  MPI_Type_contiguous(2*(N2+4)*NPR, MPI_DOUBLE, &d_row_type);
+  MPI_Type_commit(&d_row_type);
 
-    // Custom types for printing restart files
-    MPI_Type_contiguous(NPR*CHARSPERNUM, MPI_CHAR, &array_as_string);
-    MPI_Type_commit(&array_as_string);
+  MPI_Type_vector(N1+4, 2, N2+4, MPI_INT, &i_col_type);
+  MPI_Type_commit(&i_col_type);
 
-    int globalsizes[2] = {(N1+4)*NumRows, (N2+4)*NumCols};
-    int localsizes[2]  = {N1+4, N2+4};
-    int starts[2]      = {(N1+4)*RowRank, (N2+4)*ColRank};
-    int order          = MPI_ORDER_C;
-    MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order,
-                             array_as_string, &local_array);
-    MPI_Type_commit(&local_array);
+  MPI_Type_contiguous(2*(N2+4), MPI_INT, &i_row_type);
+  MPI_Type_commit(&i_row_type);
+
+  halo_count = 0;
+
+  // Custom types for printing restart files
+  MPI_Type_contiguous(NPR*CHARSPERNUM, MPI_CHAR, &array_as_string);
+  MPI_Type_commit(&array_as_string);
+
+  int globalsizes[2] = {(N1+4)*NumRows, (N2+4)*NumCols};
+  int localsizes[2]  = {N1+4, N2+4};
+  int starts[2]      = {(N1+4)*RowRank, (N2+4)*ColRank};
+  int order          = MPI_ORDER_C;
+  MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order,
+                           array_as_string, &local_array);
+  MPI_Type_commit(&local_array);
 }
 
 /*****************************************************************

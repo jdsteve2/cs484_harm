@@ -52,6 +52,7 @@ void dump(char *filename)
 	double r,th,vmin,vmax ;
 	struct of_geom geom ;
 	struct of_state q ;
+	char hfilename[100];
 	FILE *fp;
 
 	MPI_File file;
@@ -64,11 +65,19 @@ void dump(char *filename)
 	***************************************************************/
 
 	if (WorldRank == 0) {
-	  fp = fopen(filename, "w");
+	  /* get the name of the header file */
+	  i = 0;
+	  j = 0;
+	  while (filename[j] != '\0') {
+	    if (i == 6) // just after the '/'
+	      hfilename[i++] = 'h';
+	    hfilename[i++] = filename[j++];
+	  }
+	  fp = fopen(hfilename, "w");
 
     fprintf(fp, FMT_DBL_OUT, t        );
-    fprintf(fp, FMT_INT_OUT, N1       );
-    fprintf(fp, FMT_INT_OUT, N2       );
+    fprintf(fp, FMT_INT_OUT, GlobalN1 );
+    fprintf(fp, FMT_INT_OUT, GlobalN2 );
     fprintf(fp, FMT_DBL_OUT, startx[1]);
     fprintf(fp, FMT_DBL_OUT, startx[2]);
     fprintf(fp, FMT_DBL_OUT, dx[1]    );
@@ -96,7 +105,7 @@ void dump(char *filename)
     fprintf(fp,"\n") ;
     fclose(fp);
 	}
-		
+
 	/***************************************************************
 	  Write simulation information :
 	***************************************************************/
@@ -194,28 +203,31 @@ void dump(char *filename)
 	 * kill performance by too much.
 	 */
 
-	/* need a custom type for printing a whole row in one go */
-	MPI_Type_contiguous(num*CHARSPERNUM, MPI_CHAR, &data_as_string);
-	MPI_Type_commit(&data_as_string);
+  /* need a custom type for printing a whole row in one go */
+  MPI_Type_contiguous(num*CHARSPERNUM, MPI_CHAR, &data_as_string);
+  MPI_Type_commit(&data_as_string);
 
-	/* need a new type to set file view since we're looking at N1xN2 elements */
-	int globalsizes[2] = {GlobalN1, GlobalN2};
+  /* need a new type to set file view since we're looking at N1xN2 elements */
+  int globalsizes[2] = {GlobalN1, GlobalN2};
   int localsizes[2]  = {N1, N2};
   int starts[2]      = {N1*RowRank, N2*ColRank};
   int order          = MPI_ORDER_C;
+
   MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order,
                            data_as_string, &dump_array);
   MPI_Type_commit(&dump_array);
 
 	/* open the file, set the view, write data and close the file */
   MPI_File_open(MPI_COMM_WORLD, filename,
-                MPI_MODE_APPEND,
+                MPI_MODE_CREATE | MPI_MODE_WRONLY,
                 MPI_INFO_NULL, &file);
 
-  MPI_File_set_view(file, 0, MPI_CHAR, dump_array, "native", MPI_INFO_NULL);
+  MPI_File_set_view(file, 0, data_as_string, dump_array, "native", MPI_INFO_NULL);
   MPI_File_write_all(file, data_as_text, N1*N2, data_as_string, &status);
   MPI_File_close(&file);
 
   /* clean up */
   free(data_as_text);
+  MPI_Type_free(&data_as_string);
+  MPI_Type_free(&dump_array);
 }

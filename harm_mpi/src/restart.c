@@ -61,7 +61,7 @@
 void restart_write()
 {
   FILE *fp;
-  char filename[20];
+  char filename[100];
   int idum, i, j, k;
 
   MPI_File file;
@@ -72,46 +72,51 @@ void restart_write()
   *************************************************************/
   if (WorldRank == 0) {
     if (rdump_cnt%2 == 0) {
-      fp = fopen("dumps/rdump0","wt") ;
+      fp = fopen("dumps/hrdump0","wt") ;
       sprintf(filename, "dumps/rdump0");
       fprintf(stderr,"RESTART  file=dumps/rdump0\n") ;
     }
     else {
-      fp = fopen("dumps/rdump1","wt") ;
+      fp = fopen("dumps/hrdump1","wt") ;
       sprintf(filename, "dumps/rdump1");
       fprintf(stderr,"RESTART file=dumps/rdump1\n") ;
     }
 
     if (fp == NULL) {
       fprintf(stderr,"Cannot open restart file\n") ;
-      exit(2) ;
+      sprintf(filename, "");
+    } else {
+      fprintf(fp, FMT_INT_OUT, GlobalN1 );
+      fprintf(fp, FMT_INT_OUT, GlobalN2 );
+      fprintf(fp, FMT_DBL_OUT, t        );
+      fprintf(fp, FMT_DBL_OUT, tf       );
+      fprintf(fp, FMT_INT_OUT, nstep    );
+      fprintf(fp, FMT_DBL_OUT, a        );
+      fprintf(fp, FMT_DBL_OUT, gam      );
+      fprintf(fp, FMT_DBL_OUT, cour     );
+      fprintf(fp, FMT_DBL_OUT, DTd      );
+      fprintf(fp, FMT_DBL_OUT, DTl      );
+      fprintf(fp, FMT_DBL_OUT, DTi      );
+      fprintf(fp, FMT_INT_OUT, DTr      );
+      fprintf(fp, FMT_INT_OUT, dump_cnt );
+      fprintf(fp, FMT_INT_OUT, image_cnt);
+      fprintf(fp, FMT_INT_OUT, rdump_cnt);
+      fprintf(fp, FMT_DBL_OUT, dt       );
+      fprintf(fp, FMT_INT_OUT, lim      );
+      fprintf(fp, FMT_INT_OUT, failed   );
+      fprintf(fp, FMT_DBL_OUT, Rin      );
+      fprintf(fp, FMT_DBL_OUT, Rout     );
+      fprintf(fp, FMT_DBL_OUT, hslope   );
+      fprintf(fp, FMT_DBL_OUT, R0       );
+
+      fprintf(fp, "\n");
+      fclose(fp) ;
     }
+  }
 
-    fprintf(fp, FMT_INT_OUT, N1       );
-    fprintf(fp, FMT_INT_OUT, N2       );
-    fprintf(fp, FMT_DBL_OUT, t        );
-    fprintf(fp, FMT_DBL_OUT, tf       );
-    fprintf(fp, FMT_INT_OUT, nstep    );
-    fprintf(fp, FMT_DBL_OUT, a        );
-    fprintf(fp, FMT_DBL_OUT, gam      );
-    fprintf(fp, FMT_DBL_OUT, cour     );
-    fprintf(fp, FMT_DBL_OUT, DTd      );
-    fprintf(fp, FMT_DBL_OUT, DTl      );
-    fprintf(fp, FMT_DBL_OUT, DTi      );
-    fprintf(fp, FMT_INT_OUT, DTr      );
-    fprintf(fp, FMT_INT_OUT, dump_cnt );
-    fprintf(fp, FMT_INT_OUT, image_cnt);
-    fprintf(fp, FMT_INT_OUT, rdump_cnt);
-    fprintf(fp, FMT_DBL_OUT, dt       );
-    fprintf(fp, FMT_INT_OUT, lim      );
-    fprintf(fp, FMT_INT_OUT, failed   );
-    fprintf(fp, FMT_DBL_OUT, Rin      );
-    fprintf(fp, FMT_DBL_OUT, Rout     );
-    fprintf(fp, FMT_DBL_OUT, hslope   );
-    fprintf(fp, FMT_DBL_OUT, R0       );
-
-    fprintf(fp, "\n");
-    fclose(fp) ;
+  MPI_Bcast(filename, 100, MPI_CHAR, 0, MPI_COMM_WORLD);
+  if (!strcmp(filename, "")) {
+      exit(2);
   }
 
   /* convert the data to strings so the outputted file is in human readable format */
@@ -129,10 +134,10 @@ void restart_write()
 
   /* open the file, set the view, write data and close the file */
   MPI_File_open(MPI_COMM_WORLD, filename,
-                MPI_MODE_APPEND,
+                MPI_MODE_CREATE | MPI_MODE_WRONLY,
                 MPI_INFO_NULL, &file);
 
-  MPI_File_set_view(file, 0, MPI_CHAR, local_array, "native", MPI_INFO_NULL);
+  MPI_File_set_view(file, 0, array_as_string, local_array, "native", MPI_INFO_NULL);
   MPI_File_write_all(file, data_as_text, (N1+4)*(N2+4), array_as_string, &status);
   MPI_File_close(&file);
 
@@ -163,9 +168,8 @@ void restart_write()
 int restart_init()
 {
   FILE *fp0, *fp1;
-  char filename[20];
+  char filename[100];
   char ans[100];
-  //int strncmp(char *s1, char *s2, int n) ;
   int i, j, k;
 
   /* set up global arrays */
@@ -207,10 +211,8 @@ int restart_init()
     }
   }
 
- 
-  MPI_Bcast(filename, 20, MPI_CHAR, 0, MPI_COMM_WORLD);
-
-  if(!strcmp(filename, "")) {
+  MPI_Bcast(filename, 100, MPI_CHAR, 0, MPI_COMM_WORLD);
+  if (!strcmp(filename, "")) {
       return(0) ;
   }
 
@@ -260,55 +262,63 @@ void restart_read(char *filename)
 {
   FILE *fp;
   int idum, i, j, k ;
+  char hfilename[100];
 
   MPI_File file;
   MPI_Status status;
 
   /*************************************************************
-	  Rank 0 reads the header of the restart file:
+	  Everyone can simultaneously read the restart file:
   *************************************************************/
-  if (WorldRank == 0) {
-    fp = fopen(filename, "r");
-    fscanf(fp, "%d", &idum  );
-    if(idum != N1) {
-      fprintf(stderr,"error reading restart file; N1 differs\n") ;
-      exit(3) ;
-    }
-    fscanf(fp, "%d", &idum  );
-    if(idum != N2) {
-      fprintf(stderr,"error reading restart file; N2 differs\n") ;
-      exit(4) ;
-    }
 
-    fscanf(fp, "%lf", &t        );
-    fscanf(fp, "%lf", &tf       );
-    fscanf(fp, "%d",  &nstep    );
-    fscanf(fp, "%lf", &a        );
-    fscanf(fp, "%lf", &gam      );
-    fscanf(fp, "%lf", &cour     );
-    fscanf(fp, "%lf", &DTd      );
-    fscanf(fp, "%lf", &DTl      );
-    fscanf(fp, "%lf", &DTi      );
-    fscanf(fp, "%d",  &DTr      );
-    fscanf(fp, "%d",  &dump_cnt );
-    fscanf(fp, "%d",  &image_cnt);
-    fscanf(fp, "%d",  &rdump_cnt);
-    fscanf(fp, "%lf", &dt       );
-    fscanf(fp, "%d",  &lim      );
-    fscanf(fp, "%d",  &failed   );
-    fscanf(fp, "%lf", &Rin      );
-    fscanf(fp, "%lf", &Rout     );
-    fscanf(fp, "%lf", &hslope   );
-    fscanf(fp, "%lf", &R0       );
-
-    fclose(fp);
+  /* get the name of the header file */
+  i = 0;
+  j = 0;
+  while (filename[j] != '\0') {
+    if (i == 6) // just after the '/'
+      hfilename[i++] = 'h';
+    hfilename[i++] = filename[j++];
   }
+  fp = fopen(hfilename, "r");
+
+  fscanf(fp, "%d", &idum  );
+  if(idum != GlobalN1) {
+    fprintf(stderr,"error reading restart file; N1 differs\n") ;
+    exit(3);
+  }
+  fscanf(fp, "%d", &idum  );
+  if(idum != GlobalN2) {
+    fprintf(stderr,"error reading restart file; N2 differs\n") ;
+    exit(4);
+  }
+
+  fscanf(fp, "%lf", &t        );
+  fscanf(fp, "%lf", &tf       );
+  fscanf(fp, "%d",  &nstep    );
+  fscanf(fp, "%lf", &a        );
+  fscanf(fp, "%lf", &gam      );
+  fscanf(fp, "%lf", &cour     );
+  fscanf(fp, "%lf", &DTd      );
+  fscanf(fp, "%lf", &DTl      );
+  fscanf(fp, "%lf", &DTi      );
+  fscanf(fp, "%d",  &DTr      );
+  fscanf(fp, "%d",  &dump_cnt );
+  fscanf(fp, "%d",  &image_cnt);
+  fscanf(fp, "%d",  &rdump_cnt);
+  fscanf(fp, "%lf", &dt       );
+  fscanf(fp, "%d",  &lim      );
+  fscanf(fp, "%d",  &failed   );
+  fscanf(fp, "%lf", &Rin      );
+  fscanf(fp, "%lf", &Rout     );
+  fscanf(fp, "%lf", &hslope   );
+  fscanf(fp, "%lf", &R0       );
+
+  fclose(fp);
 
   /* open the file, set the view, read the contents and close the file */
   char *data_as_text = (char *) malloc(CHARSPERNUM*NPR*(N1+4)*(N2+4)*sizeof(char));
   MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &file);
-  MPI_File_seek_shared(file, SEEK_DISP, MPI_SEEK_SET);
-  MPI_File_set_view(file, 0, MPI_CHAR, local_array, "native", MPI_INFO_NULL);
+  MPI_File_set_view(file, 0, array_as_string, local_array, "native", MPI_INFO_NULL);
   MPI_File_read_all(file, data_as_text, (N1+4)*(N2+4), array_as_string, &status);
   MPI_File_close(&file);
 
