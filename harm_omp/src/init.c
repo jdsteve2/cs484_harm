@@ -112,7 +112,7 @@ void init()
 	DTd = 50. ;	/* dumping frequency, in units of M */
 	DTl = 2. ;	/* logfile frequency, in units of M */
 	DTi = 2. ; 	/* image file frequ., in units of M */
-	DTr = 100 ; 	/* restart file frequ., in timesteps */
+	DTr = 100 ;	/* restart file frequ., in timesteps */
 
 	/* start diagnostic counters */
 	dump_cnt = 0 ;
