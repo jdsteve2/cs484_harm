@@ -57,6 +57,7 @@ int call_code ;
 	struct of_state q ;
 	int imax,jmax ;
     double lred[3], gred[3];
+    double v[2];
     int tmp[2];
     struct {
         double d;
@@ -164,13 +165,31 @@ int call_code ;
         if(WorldRank == 0) {
             fprintf(stderr,"LOG      t=%g \t divbmax: %d %d %g\n",
                     t,imax,jmax,divbmax) ;
-            // MPI Get the last value from where required to print
+            fflush(stderr);
+            // Get the last two values from where required to print
+            if(((GlobalN1/2/N1) == RowRank) && ((GlobalN2/2/N2) == ColRank)) {
+                tmp[0] = (GlobalN1/2)%N1;
+                tmp[1] = (GlobalN2/2)%N2;
+                v[1] = p[tmp[0]][tmp[1]][UU];
+                v[0] = v[1] * pow(p[tmp[0]][tmp[1]][RHO], -gam);
+            } else {
+                tmp[0] = GlobalN1/2/N1;
+                tmp[1] = GlobalN2/2/N2;
+                MPI_Recv(v, 2, MPI_DOUBLE, tmp[0]*NumCols + tmp[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
             fprintf(ener_file,"%10.5g %10.5g %10.5g %10.5g %15.8g %15.8g ",
-                    t,rmed,pp,e,p[N1/2][N2/2][UU]*pow(p[N1/2][N2/2][RHO],-gam),
-                    p[N1/2][N2/2][UU]) ;
+                    t,rmed,pp,e, v[0], v[1]) ;
             fprintf(ener_file,"%15.8g %15.8g %15.8g ",mdot,edot,ldot) ;
             fprintf(ener_file,"\n") ;
             fflush(ener_file) ;
+        }
+        // Send p[N1/2][N2/2][UU]*pow(p[N1/2][N2/2][RHO],-gam) and p[N1/2][N2/2][UU]
+        else if(((GlobalN1/2/N1) == RowRank) && ((GlobalN2/2/N2) == ColRank)) {
+                tmp[0] = (GlobalN1/2)%N1;
+                tmp[1] = (GlobalN2/2)%N2;
+                v[1] = p[tmp[0]][tmp[1]][UU];
+                v[0] = v[1] * pow(p[tmp[0]][tmp[1]][RHO], -gam);
+                MPI_Send(v, 2, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
         }
 	}
 
@@ -277,6 +296,10 @@ void diag_flux(double (** F1)[NPR], double (** F2)[NPR])
             lsum[1] = edot;
             lsum[2] = ldot;
             MPI_Reduce(lsum, gsum, 3, MPI_DOUBLE, MPI_SUM, 0, CommRow);
-            // FIXME: Assign gsum to mdot, edot and ldot, right?
+            if(WorldRank == 0) {
+                mdot = gsum[0];
+                edot = gsum[1];
+                ldot = gsum[2];
+            }
         }
 }
