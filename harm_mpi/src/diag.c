@@ -199,14 +199,13 @@ int call_code ;
 	   call_code == DUMP_OUT ||
 	   call_code == FINAL_OUT) {
 
-		/* make regular dump file */
-    if (WorldRank == 0) {
-        sprintf(dfnam, "dumps/dump%03d", dump_cnt) ;
-        fprintf(stderr, "DUMP     file=%s\n", dfnam) ;
-    }
+		/* make dump file name */
+	  sprintf(dfnam, "dumps/dump%03d", dump_cnt);
+    if (WorldRank == 0)
+      fprintf(stderr, "DUMP     file=%s\n", dfnam);
 
-		dump(dfnam);
-		dump_cnt++;
+    dump(dfnam);
+    dump_cnt++;
 	}
 	
 	/* image dump at regular intervals */
