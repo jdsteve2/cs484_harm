@@ -165,7 +165,7 @@ double advance(
   flux_ct(F1,F2) ;  // added omp calls
 
   /* evaluate diagnostics based on fluxes */
-  diag_flux(F1,F2) ;  //TODO add omp directives cleverly
+  diag_flux(F1,F2) ; 
 
   fprintf(stderr,"1") ;
   /** now update pi to pf **/
@@ -240,7 +240,6 @@ double fluxcalc(
 	else if(dir == 2) {idel = 0; jdel = 1; face = FACE2;}
 	else { exit(10); }
 
-	int size_N1p4_N2p4_NPR_d = (N1+4)*(N2+4)*NPR*sizeof(double);
 	Timer time,tOMP;
 	double tot_time,tot_timeOMP;
 	int tid, threadstart, threadfinish, rows_per_thread;
@@ -249,6 +248,7 @@ double fluxcalc(
 
 #if(TIMING_COMPARISON)
 	//TESTING
+	int size_N1p4_N2p4_NPR_d = (N1+4)*(N2+4)*NPR*sizeof(double);
 	double * test_F = (double*) malloc(size_N1p4_N2p4_NPR_d);
 	memcpy(test_F, &F[-2][-2][0], size_N1p4_N2p4_NPR_d);
 	double * test_pr = (double*) malloc(size_N1p4_N2p4_NPR_d);
@@ -369,63 +369,60 @@ double fluxcalc(
 	for(i=threadstart;i<threadfinish;i++) {
 	  for(j=-idel;j<=N2;j++) {
 
-
 		/* this avoids problems on the pole */
 		if(dir == 2 && (j == 0 || j == N2)) {
-                        PLOOP F[i][j][k] = 0. ;
+        	PLOOP F[i][j][k] = 0. ;
 		}
 		else {
 
-                PLOOP {
-                        p_l[k] = pr[i-idel][j-jdel][k] 
+            PLOOP {
+                p_l[k] = pr[i-idel][j-jdel][k] 
 					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        p_r[k] = pr[i][j][k]   
+                p_r[k] = pr[i][j][k]   
 					- 0.5*dq[i][j][k] ;
-                }
+            }
 
-		get_geometry(i,j,face,&geom) ;
+			get_geometry(i,j,face,&geom) ;
 
 #if(RESCALE)
-		rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
-		rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
+			rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
+			rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
 #endif //RESCALE
-		get_state(p_l,&geom,&state_l) ;
-		get_state(p_r,&geom,&state_r) ;
+			get_state(p_l,&geom,&state_l) ;
+			get_state(p_r,&geom,&state_r) ;
 		
-		primtoflux(p_l,&state_l,dir,&geom,F_l) ;
-		primtoflux(p_r,&state_r,dir,&geom,F_r) ;
+			primtoflux(p_l,&state_l,dir,&geom,F_l) ;
+			primtoflux(p_r,&state_r,dir,&geom,F_r) ;
 
-		primtoflux(p_l,&state_l,TT, &geom,U_l) ;
-		primtoflux(p_r,&state_r,TT, &geom,U_r) ;
+			primtoflux(p_l,&state_l,TT, &geom,U_l) ;
+			primtoflux(p_r,&state_r,TT, &geom,U_r) ;
 
-		vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
-		vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
+			vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
+			vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
 
-		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
-		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
-		ctop = MY_MAX(cmax,cmin) ;
+			cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
+			cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
+			ctop = MY_MAX(cmax,cmin) ;
 
 
-		PLOOP F[i][j][k] = 
-			HLLF*(
-			(cmax*F_l[k] + cmin*F_r[k] 
-				- cmax*cmin*(U_r[k] - U_l[k]))/
-					(cmax + cmin + SMALL) 
-			) +
-			LAXF*(
-			0.5*(F_l[k] + F_r[k] 
-				- ctop*(U_r[k] - U_l[k])) 
-			) ;
+			PLOOP F[i][j][k] = 
+				HLLF*(
+						(cmax*F_l[k] + cmin*F_r[k] 
+						- cmax*cmin*(U_r[k] - U_l[k]))/
+						(cmax + cmin + SMALL) 
+					 ) +
+				LAXF*(
+						0.5*(F_l[k] + F_r[k] 
+						- ctop*(U_r[k] - U_l[k])) 
+					 ) ;
 
-                /* evaluate restriction on timestep */
-                cmax = MY_MAX(cmax,cmin) ;
-                dtij = cour*dx[dir]/cmax ;
-
-		if(dtij < ndt_private) ndt_private = dtij ;
+		            /* evaluate restriction on timestep */
+		    cmax = MY_MAX(cmax,cmin) ;
+		    dtij = cour*dx[dir]/cmax ;
+			if(dtij < ndt_private) ndt_private = dtij ;
 		}
 	  }
 	}
-
 	#pragma omp critical
 	{
 	if(ndt_private < ndt) ndt = ndt_private ;
@@ -658,720 +655,5 @@ void finalize_mpi_omp()
 
 
 
-
-
-
-double fluxcalc_1(
-	double pr[][N2+4][NPR], 
-	double F[][N2+4][NPR], 
-	int dir 
-	)
-{
-	int i,j,k,idel,jdel,face ;
-	double p_l[NPR],p_r[NPR],F_l[NPR],F_r[NPR],U_l[NPR],U_r[NPR] ;
-	double cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ndt,dtij ;
-	double ctop ;
-	struct of_geom geom ;
-	struct of_state state_l,state_r ;
-	void rescale(double *pr, int which, int dir, int ii, int jj, int face, struct of_geom *geom) ;
-	double bsq ;
-
-        if     (dir == 1) {idel = 1; jdel = 0; face = FACE1;}
-	else if(dir == 2) {idel = 0; jdel = 1; face = FACE2;}
-	else { exit(10); }
-
-	int size_N1p4_N2p4_NPR_d = (N1+4)*(N2+4)*NPR*sizeof(double);
-	Timer time,tOMP;
-	double tot_time,tot_timeOMP;
-	int tid, threadstart, threadfinish, rows_per_thread;
-
-#if(RESCALE)
-
-
-#if(TIMING_COMPARISON)
-	//TESTING
-	double * test_pr = (double*) malloc(size_N1p4_N2p4_NPR_d);
-
-	memcpy(test_pr, &pr[-2][-2][0], size_N1p4_N2p4_NPR_d);
-	startTime(&tOMP);
-#endif //TIMING_COMPARISON
-
-	rows_per_thread = ceil(((float)N1+4)/numthreads);
-	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish)
-	{
-	struct of_geom mygeom;  //TODO is this best
-    tid = omp_get_thread_num();
-	threadstart = -2+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
-	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),numthreads,threadstart,threadfinish);
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	//ZSLOOP(-2,N1+1,-2,N2+1) {
-	//for(i=-2;i<=N1+1;i++) {
-	//  for(j=-2;j<=N2+1;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-2;j<=N2+1;j++) {
-		get_geometry(i,j,CENT,&mygeom) ;
-		rescale(pr[i][j],FORWARD, dir, i,j,CENT,&mygeom) ;
-	  }
-	}
-	}// end omp parallel
-
-#if(TIMING_COMPARISON)
-	stopTime(&tOMP);
-
-	//TESTING
-	startTime(&time);
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	ZSLOOP(-2,N1+1,-2,N2+1) {
-		get_geometry(i,j,CENT,&geom) ;
-		rescale(&test_pr[((i+2)*(N2+4)+(j+2))*NPR],FORWARD, dir, i,j,CENT,&geom) ;
-	}
-	stopTime(&time);
-	tot_time = elapsedTime(time);
-	tot_timeOMP = elapsedTime(tOMP);
-	printf("Rescale PR Loop (orig, omp): (%f,%f)\n",tot_time,tot_timeOMP); fflush(stdout);
-	tot_time_flux_pr += tot_time;
-	tot_time_flux_pr_omp += tot_timeOMP;
-	//printf("TESTING pr... \n"); fflush(stdout);
-	verify_d(&pr[-2][-2][0],test_pr,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING pr... \n"); fflush(stdout);
-
-#endif //TIMING_COMPARISON
-
-#endif //RESCALE
-
-
-#if(TIMING_COMPARISON)
-
-	//TESTING
-	double * test_dq = (double*) malloc(size_N1p4_N2p4_NPR_d);
-	memcpy(test_dq, &dq[-2][-2][0], size_N1p4_N2p4_NPR_d);
-
-	startTime(&tOMP);
-#endif //TIMING_COMPARISON
-
-	/* then evaluate slopes */
-	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish)
-	{
-    tid = omp_get_thread_num();
-	threadstart = -1+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
-	//ZSLOOP(-1,N1,-1,N2) {
-	//for(i=-1;i<=N1;i++) {
-	//  for(j=-1;j<=N2;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-1;j<=N2;j++) {
-		PLOOP {
-			//-new get_geometry(i,j,CENT,&geom) ;
-			//-new bsq = bsq_calc(pr[i][j],&geom) ;
-			//-new if(bsq/pr[i][j][RHO] > 10. ||
-			//-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
-			//-new else lim = MC ;
-			dq[i][j][k] = slope_lim(
-				pr[i-idel][j-jdel][k],
-				pr[i][j][k],
-				pr[i+idel][j+jdel][k]
-				) ;
-		}
-	  }
-	}
-	} //end omp parallel
-
-
-
-#if(TIMING_COMPARISON)
-	stopTime(&tOMP);
-
-	//TESTING
-	startTime(&time);
-	ZSLOOP(-1,N1,-1,N2) PLOOP {
-   	        //-new get_geometry(i,j,CENT,&geom) ;
-		//-new bsq = bsq_calc(pr[i][j],&geom) ;
-		//-new if(bsq/pr[i][j][RHO] > 10. ||
-		//-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
-		//-new else lim = MC ;
-
-		//printf("%d, %d, %d, %d\n",i,j,k, ((i+2)*(N2+4)+(j+2))*(N1+4)+k);
-		//test_dq[i][j][k] = slope_lim(
-		test_dq[((i+2)*(N2+4)+(j+2))*NPR+k] = slope_lim(
-				pr[i-idel][j-jdel][k],
-				pr[i][j][k],
-				pr[i+idel][j+jdel][k]
-				) ;
-	}
-	stopTime(&time);
-	tot_time = elapsedTime(time);
-	tot_timeOMP = elapsedTime(tOMP);
-	printf("DQ Loop (orig, omp): (%f,%f)\n",tot_time,tot_timeOMP); fflush(stdout);
-	tot_time_flux_dq += tot_time;
-	tot_time_flux_dq_omp += tot_timeOMP;
-	//printf("TESTING dq... \n"); fflush(stdout);
-	verify_d(&dq[-2][-2][0],test_dq,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING dq... \n"); fflush(stdout);
-	free(test_dq);
-
-	// testing
-	double test_ndt;
-	double * test_F = (double*) malloc(size_N1p4_N2p4_NPR_d);
-	memcpy(test_F, &F[-2][-2][0], size_N1p4_N2p4_NPR_d);
-
-	startTime(&tOMP);
-#endif //TIMING_COMPARISON
-
-	ndt = 1.e9;
-	// omp_set_dynamic(0);
-	rows_per_thread = ceil(((float)N1+1-(-jdel))/numthreads);
-	//printf("threads requested %d, rows_per_thread %d, begin: %d, end: %d\n", numthreads, rows_per_thread, -jdel, N1+1);
-	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish,cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ctop,dtij)
-	{
-	struct of_geom mygeom;  //TODO is this best
-	struct of_state mystate_l,mystate_r;  //TODO is this best
-	double myp_l[NPR],myp_r[NPR],myF_l[NPR],myF_r[NPR],myU_l[NPR],myU_r[NPR]; //TODO is this best
-    tid = omp_get_thread_num();
-	threadstart = -jdel+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
-	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),numthreads,threadstart,threadfinish);
-
-	//ZSLOOP(-jdel,N1,-idel,N2) {
-	//for(i=-jdel;i<=N1;i++) {
-	//  for(j=-idel;j<=N2;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-idel;j<=N2;j++) {
-
-
-		/* this avoids problems on the pole */
-		if(dir == 2 && (j == 0 || j == N2)) {
-                        PLOOP F[i][j][k] = 0. ;
-		}
-		else {
-
-                PLOOP {
-                        myp_l[k] = pr[i-idel][j-jdel][k] 
-					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        myp_r[k] = pr[i][j][k]   
-					- 0.5*dq[i][j][k] ;
-                }
-
-		get_geometry(i,j,face,&mygeom) ;
-
-#if(RESCALE)
-		rescale(myp_l,REVERSE,dir,i,j,face,&mygeom) ;
-		rescale(myp_r,REVERSE,dir,i,j,face,&mygeom) ;
-#endif //RESCALE
-		get_state(myp_l,&mygeom,&mystate_l) ;
-		get_state(myp_r,&mygeom,&mystate_r) ;
-		
-		primtoflux(myp_l,&mystate_l,dir,&mygeom,myF_l) ;
-		primtoflux(myp_r,&mystate_r,dir,&mygeom,myF_r) ;
-
-		primtoflux(myp_l,&mystate_l,TT, &mygeom,myU_l) ;
-		primtoflux(myp_r,&mystate_r,TT, &mygeom,myU_r) ;
-
-		vchar(myp_l,&mystate_l,&mygeom,dir,&cmax_l,&cmin_l) ;
-		vchar(myp_r,&mystate_r,&mygeom,dir,&cmax_r,&cmin_r) ;
-
-		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
-		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
-		ctop = MY_MAX(cmax,cmin) ;
-
-
-		PLOOP F[i][j][k] = 
-			HLLF*(
-			(cmax*myF_l[k] + cmin*myF_r[k] 
-				- cmax*cmin*(myU_r[k] - myU_l[k]))/
-					(cmax + cmin + SMALL) 
-			) +
-			LAXF*(
-			0.5*(myF_l[k] + myF_r[k] 
-				- ctop*(myU_r[k] - myU_l[k])) 
-			) ;
-
-                /* evaluate restriction on timestep */
-                cmax = MY_MAX(cmax,cmin) ;
-                dtij = cour*dx[dir]/cmax ;
-		#pragma omp critical
-		{
-		if(dtij < ndt) ndt = dtij ;
-		}// end omp critical
-
-		}
-	  }
-	}
-
-	} //end omp parallel
-
-#if(TIMING_COMPARISON)
-	stopTime(&tOMP);
-
-	startTime(&time);
-	test_ndt = 1.e9 ;
-	// original..................................
-	ZSLOOP(-jdel,N1,-idel,N2) {
-
-		/* this avoids problems on the pole */
-		if(dir == 2 && (j == 0 || j == N2)) {
-                        //PLOOP test_F[i][j][k] = 0. ;
-                        PLOOP test_F[((i+2)*(N2+4)+(j+2))*NPR+k] = 0. ;
-		}
-		else {
-
-                PLOOP {
-                        p_l[k] = pr[i-idel][j-jdel][k] 
-					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        p_r[k] = pr[i][j][k]   
-					- 0.5*dq[i][j][k] ;
-                }
-
-		get_geometry(i,j,face,&geom) ;
-
-#if(RESCALE)
-		rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
-		rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
-#endif //RESCALE
-		get_state(p_l,&geom,&state_l) ;
-		get_state(p_r,&geom,&state_r) ;
-		
-		primtoflux(p_l,&state_l,dir,&geom,F_l) ;
-		primtoflux(p_r,&state_r,dir,&geom,F_r) ;
-
-		primtoflux(p_l,&state_l,TT, &geom,U_l) ;
-		primtoflux(p_r,&state_r,TT, &geom,U_r) ;
-
-		vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
-		vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
-
-		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
-		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
-		ctop = MY_MAX(cmax,cmin) ;
-
-
-		//PLOOP test_F[i][j][k] = 
-		PLOOP test_F[((i+2)*(N2+4)+(j+2))*NPR+k] = 
-			HLLF*(
-			(cmax*F_l[k] + cmin*F_r[k] 
-				- cmax*cmin*(U_r[k] - U_l[k]))/
-					(cmax + cmin + SMALL) 
-			) +
-			LAXF*(
-			0.5*(F_l[k] + F_r[k] 
-				- ctop*(U_r[k] - U_l[k])) 
-			) ;
-
-                /* evaluate restriction on timestep */
-                cmax = MY_MAX(cmax,cmin) ;
-                dtij = cour*dx[dir]/cmax ;
-		if(dtij < test_ndt) test_ndt = dtij ;
-
-		}
-	}
-	// ..........................................
-	stopTime(&time);
-	tot_time = elapsedTime(time);
-	tot_timeOMP = elapsedTime(tOMP);
-	printf("Big Loop (orig, omp): (%f,%f)\n",tot_time,tot_timeOMP); fflush(stdout);
-	tot_time_flux_F += tot_time;
-	tot_time_flux_F_omp += tot_timeOMP;
-
-	//printf("TESTING F... \n"); fflush(stdout);
-	verify_d(&F[-2][-2][0],test_F,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING F... \n"); fflush(stdout);
-	free(test_F);
-
-	verify_d(&ndt,&test_ndt,1); // for testing dq,pr,F 
-
-#endif //TIMING_COMPARISON
-
-#if(RESCALE)
-
-#if(TIMING_COMPARISON)
-	//TESTING
-	memcpy(test_pr, &pr[-2][-2][0], size_N1p4_N2p4_NPR_d);
-	startTime(&tOMP);
-#endif //TIMING_COMPARISON
-
-	rows_per_thread = ceil(((float)N1+4)/numthreads);
-	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish)
-	{
-	struct of_geom mygeom;  //TODO is this best
-    tid = omp_get_thread_num();
-	threadstart = -2+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
-	//printf("thread %d of %d (%d requested), start: %d, finish: %d\n",tid,omp_get_num_threads(),numthreads,threadstart,threadfinish);
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	//ZSLOOP(-2,N1+1,-2,N2+1) {
-	//for(i=-2;i<=N1+1;i++) {
-	//  for(j=-2;j<=N2+1;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-2;j<=N2+1;j++) {
-		get_geometry(i,j,CENT,&mygeom) ;
-		rescale(pr[i][j],REVERSE, dir, i,j,CENT,&mygeom) ;
-	  }
-	}
-	}// end omp parallel
-
-#if(TIMING_COMPARISON)
-	stopTime(&tOMP);
-
-	//TESTING
-	startTime(&time);
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	ZSLOOP(-2,N1+1,-2,N2+1) {
-		get_geometry(i,j,CENT,&geom) ;
-		rescale(&test_pr[((i+2)*(N2+4)+(j+2))*NPR],REVERSE, dir, i,j,CENT,&geom) ;
-	}
-	stopTime(&time);
-	tot_time = elapsedTime(time);
-	tot_timeOMP = elapsedTime(tOMP);
-	printf("Rescale PR Loop (orig, omp): (%f,%f)\n",tot_time,tot_timeOMP); fflush(stdout);
-	tot_time_flux_pr += tot_time;
-	tot_time_flux_pr_omp += tot_timeOMP;
-	//printf("TESTING pr... \n"); fflush(stdout);
-	verify_d(&pr[-2][-2][0],test_pr,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING pr... \n"); fflush(stdout);
-	free(test_pr);
-
-#endif //TIMING_COMPARISON
-
-#endif //RESCALE
-
-	return(ndt) ;
-
-}
-
-
-double fluxcalc_2(
-	double pr[][N2+4][NPR], 
-	double F[][N2+4][NPR], 
-	int dir 
-	)
-{
-	int i,j,k,idel,jdel,face ;
-	double p_l[NPR],p_r[NPR],F_l[NPR],F_r[NPR],U_l[NPR],U_r[NPR] ;
-	double cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ndt,dtij ;
-	double ctop ;
-	struct of_geom geom ;
-	struct of_state state_l,state_r ;
-	void rescale(double *pr, int which, int dir, int ii, int jj, int face, struct of_geom *geom) ;
-	double bsq ;
-
-        if     (dir == 1) {idel = 1; jdel = 0; face = FACE1;}
-	else if(dir == 2) {idel = 0; jdel = 1; face = FACE2;}
-	else { exit(10); }
-
-	int size_N1p4_N2p4_NPR_d = (N1+4)*(N2+4)*NPR*sizeof(double);
-	Timer time,tOMP;
-	double tot_time,tot_timeOMP;
-	int tid, threadstart, threadfinish, rows_per_thread;
-
-
-#if(TIMING_COMPARISON)
-	//TESTING
-	double * test_F = (double*) malloc(size_N1p4_N2p4_NPR_d);
-	memcpy(test_F, &F[-2][-2][0], size_N1p4_N2p4_NPR_d);
-	double * test_pr = (double*) malloc(size_N1p4_N2p4_NPR_d);
-	memcpy(test_pr, &pr[-2][-2][0], size_N1p4_N2p4_NPR_d);
-	double * test_dq = (double*) malloc(size_N1p4_N2p4_NPR_d);
-	memcpy(test_dq, &dq[-2][-2][0], size_N1p4_N2p4_NPR_d);
-	double test_ndt;
-	startTime(&tOMP);
-#endif //TIMING_COMPARISON
-
-	ndt = 1.e9;
-	#pragma omp parallel private(i,j,k,tid,threadstart,threadfinish,rows_per_thread,cmax_l,cmax_r,cmin_l,cmin_r,cmax,cmin,ctop,dtij)
-	{
-	struct of_geom mygeom;  //TODO is this best?
-    tid = omp_get_thread_num();
-
-#if(RESCALE)
-	//TODO figure out what to do with rows_per_thread
-	rows_per_thread = ceil(((float)N1+4)/numthreads);
-	threadstart = -2+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	//ZSLOOP(-2,N1+1,-2,N2+1) {
-	//for(i=-2;i<=N1+1;i++) {
-	//  for(j=-2;j<=N2+1;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-2;j<=N2+1;j++) {
-		get_geometry(i,j,CENT,&mygeom) ;
-		rescale(pr[i][j],FORWARD, dir, i,j,CENT,&mygeom) ;
-	  }
-	}
-#pragma omp barrier
-#endif //RESCALE
-
-	/* then evaluate slopes */
-	rows_per_thread = ceil(((float)N1+2)/numthreads);
-	threadstart = -1+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
-	//ZSLOOP(-1,N1,-1,N2) {
-	//for(i=-1;i<=N1;i++) {
-	//  for(j=-1;j<=N2;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-1;j<=N2;j++) {
-		PLOOP {
-			//-new get_geometry(i,j,CENT,&geom) ;
-			//-new bsq = bsq_calc(pr[i][j],&geom) ;
-			//-new if(bsq/pr[i][j][RHO] > 10. ||
-			//-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
-			//-new else lim = MC ;
-			dq[i][j][k] = slope_lim(
-				pr[i-idel][j-jdel][k],
-				pr[i][j][k],
-				pr[i+idel][j+jdel][k]
-				) ;
-		}
-	  }
-	}
-
-#pragma omp barrier
-	rows_per_thread = ceil(((float)N1+1-(-jdel))/numthreads);
-	struct of_state mystate_l,mystate_r;  //TODO is this best?
-	double myp_l[NPR],myp_r[NPR],myF_l[NPR],myF_r[NPR],myU_l[NPR],myU_r[NPR]; //TODO is this best?
-	threadstart = -jdel+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+1 ? threadstart+rows_per_thread : N1+1);
-
-	//ZSLOOP(-jdel,N1,-idel,N2) {
-	//for(i=-jdel;i<=N1;i++) {
-	//  for(j=-idel;j<=N2;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-idel;j<=N2;j++) {
-
-		/* this avoids problems on the pole */
-		if(dir == 2 && (j == 0 || j == N2)) {
-                        PLOOP F[i][j][k] = 0. ;
-		}
-		else {
-
-                PLOOP {
-                        myp_l[k] = pr[i-idel][j-jdel][k] 
-					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        myp_r[k] = pr[i][j][k]   
-					- 0.5*dq[i][j][k] ;
-                }
-
-		get_geometry(i,j,face,&mygeom) ;
-
-#if(RESCALE)
-		rescale(myp_l,REVERSE,dir,i,j,face,&mygeom) ;
-		rescale(myp_r,REVERSE,dir,i,j,face,&mygeom) ;
-#endif //RESCALE
-		get_state(myp_l,&mygeom,&mystate_l) ;
-		get_state(myp_r,&mygeom,&mystate_r) ;
-		
-		primtoflux(myp_l,&mystate_l,dir,&mygeom,myF_l) ;
-		primtoflux(myp_r,&mystate_r,dir,&mygeom,myF_r) ;
-
-		primtoflux(myp_l,&mystate_l,TT, &mygeom,myU_l) ;
-		primtoflux(myp_r,&mystate_r,TT, &mygeom,myU_r) ;
-
-		vchar(myp_l,&mystate_l,&mygeom,dir,&cmax_l,&cmin_l) ;
-		vchar(myp_r,&mystate_r,&mygeom,dir,&cmax_r,&cmin_r) ;
-
-		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
-		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
-		ctop = MY_MAX(cmax,cmin) ;
-
-
-		PLOOP F[i][j][k] = 
-			HLLF*(
-			(cmax*myF_l[k] + cmin*myF_r[k] 
-				- cmax*cmin*(myU_r[k] - myU_l[k]))/
-					(cmax + cmin + SMALL) 
-			) +
-			LAXF*(
-			0.5*(myF_l[k] + myF_r[k] 
-				- ctop*(myU_r[k] - myU_l[k])) 
-			) ;
-
-                /* evaluate restriction on timestep */
-                cmax = MY_MAX(cmax,cmin) ;
-                dtij = cour*dx[dir]/cmax ;
-		#pragma omp critical
-		{
-		if(dtij < ndt) ndt = dtij ;
-		}// end omp critical
-
-		}
-	  }
-	}
-
-
-#if(RESCALE)
-#pragma omp barrier
-	rows_per_thread = ceil(((float)N1+4)/numthreads);
-	threadstart = -2+tid*rows_per_thread;
-	threadfinish = (threadstart+rows_per_thread < N1+2 ? threadstart+rows_per_thread : N1+2);
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	//ZSLOOP(-2,N1+1,-2,N2+1) {
-	//for(i=-2;i<=N1+1;i++) {
-	//  for(j=-2;j<=N2+1;j++) {
-	for(i=threadstart;i<threadfinish;i++) {
-	  for(j=-2;j<=N2+1;j++) {
-		get_geometry(i,j,CENT,&mygeom) ;
-		rescale(pr[i][j],REVERSE, dir, i,j,CENT,&mygeom) ;
-	  }
-	}
-#endif //RESCALE
-	}// end omp parallel
-
-#if(TIMING_COMPARISON)
-	stopTime(&tOMP);
-#endif //TIMING_COMPARISON
-
-
-
-
-
-
-
-#if(TIMING_COMPARISON)
-	startTime(&time);
-#if(RESCALE)
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	ZSLOOP(-2,N1+1,-2,N2+1) {
-		get_geometry(i,j,CENT,&geom) ;
-		rescale(&test_pr[((i+2)*(N2+4)+(j+2))*NPR],FORWARD, dir, i,j,CENT,&geom) ;
-	}
-#endif //RESCALE
-
-	ZSLOOP(-1,N1,-1,N2) PLOOP {
-   	        //-new get_geometry(i,j,CENT,&geom) ;
-		//-new bsq = bsq_calc(pr[i][j],&geom) ;
-		//-new if(bsq/pr[i][j][RHO] > 10. ||
-		//-new    bsq/pr[i][j][UU]  > 1.e3) lim = MINM ;
-		//-new else lim = MC ;
-
-		//test_dq[i][j][k] = slope_lim(
-		/*
-		test_dq[((i+2)*(N2+4)+(j+2))*NPR+k] = slope_lim(
-				pr[i-idel][j-jdel][k],
-				pr[i][j][k],
-				pr[i+idel][j+jdel][k]
-				) ;
-		*/
-		test_dq[((i+2)*(N2+4)+(j+2))*NPR+k] = slope_lim(
-				test_pr[((i-idel+2)*(N2+4)+(j-jdel+2))*NPR+k],
-				test_pr[((i+2)*(N2+4)+(j+2))*NPR+k],
-				test_pr[((i+idel+2)*(N2+4)+(j+jdel+2))*NPR+k]
-				) ;
-	}
-
-	test_ndt = 1.e9 ;
-	ZSLOOP(-jdel,N1,-idel,N2) {
-
-		/* this avoids problems on the pole */
-		if(dir == 2 && (j == 0 || j == N2)) {
-                        //PLOOP test_F[i][j][k] = 0. ;
-                        PLOOP test_F[((i+2)*(N2+4)+(j+2))*NPR+k] = 0. ;
-		}
-		else {
-
-                PLOOP { /*
-                        p_l[k] = pr[i-idel][j-jdel][k] 
-					+ 0.5*dq[i-idel][j-jdel][k] ;
-                        p_r[k] = pr[i][j][k]   
-					- 0.5*dq[i][j][k]
-						*/
-                        p_l[k] = test_pr[((i-idel+2)*(N2+4)+(j-jdel+2))*NPR+k] 
-					+ 0.5*test_dq[((i-idel+2)*(N2+4)+(j-jdel+2))*NPR+k] ;
-                        p_r[k] = test_pr[((i+2)*(N2+4)+(j+2))*NPR+k]   
-					- 0.5*test_dq[((i+2)*(N2+4)+(j+2))*NPR+k] ;
-                }
-
-		get_geometry(i,j,face,&geom) ;
-
-#if(RESCALE)
-		rescale(p_l,REVERSE,dir,i,j,face,&geom) ;
-		rescale(p_r,REVERSE,dir,i,j,face,&geom) ;
-#endif //RESCALE
-		get_state(p_l,&geom,&state_l) ;
-		get_state(p_r,&geom,&state_r) ;
-		
-		primtoflux(p_l,&state_l,dir,&geom,F_l) ;
-		primtoflux(p_r,&state_r,dir,&geom,F_r) ;
-
-		primtoflux(p_l,&state_l,TT, &geom,U_l) ;
-		primtoflux(p_r,&state_r,TT, &geom,U_r) ;
-
-		vchar(p_l,&state_l,&geom,dir,&cmax_l,&cmin_l) ;
-		vchar(p_r,&state_r,&geom,dir,&cmax_r,&cmin_r) ;
-
-		cmax = fabs(MY_MAX(MY_MAX(0., cmax_l),  cmax_r)) ;
-		cmin = fabs(MY_MAX(MY_MAX(0.,-cmin_l), -cmin_r)) ;
-		ctop = MY_MAX(cmax,cmin) ;
-
-
-		//PLOOP test_F[i][j][k] = 
-		PLOOP test_F[((i+2)*(N2+4)+(j+2))*NPR+k] = 
-			HLLF*(
-			(cmax*F_l[k] + cmin*F_r[k] 
-				- cmax*cmin*(U_r[k] - U_l[k]))/
-					(cmax + cmin + SMALL) 
-			) +
-			LAXF*(
-			0.5*(F_l[k] + F_r[k] 
-				- ctop*(U_r[k] - U_l[k])) 
-			) ;
-
-                /* evaluate restriction on timestep */
-                cmax = MY_MAX(cmax,cmin) ;
-                dtij = cour*dx[dir]/cmax ;
-		if(dtij < test_ndt) test_ndt = dtij ;
-
-		}
-	}
-
-#if(RESCALE)
-
-	/** evaluate slopes of primitive variables **/
-	/* first rescale */
-	ZSLOOP(-2,N1+1,-2,N2+1) {
-		get_geometry(i,j,CENT,&geom) ;
-		rescale(&test_pr[((i+2)*(N2+4)+(j+2))*NPR],REVERSE, dir, i,j,CENT,&geom) ;
-	}
-
-#endif //RESCALE
-
-	stopTime(&time);
-	tot_time = elapsedTime(time);
-	tot_timeOMP = elapsedTime(tOMP);
-	tot_time_flux += tot_time;
-	tot_time_flux_omp += tot_timeOMP;
-
-	//printf("TESTING pr... \n"); fflush(stdout);
-	verify_d(&pr[-2][-2][0],test_pr,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING pr... \n"); fflush(stdout);
-	//printf("TESTING dq... \n"); fflush(stdout);
-	verify_d(&dq[-2][-2][0],test_dq,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING dq... \n"); fflush(stdout);
-	//printf("TESTING F... \n"); fflush(stdout);
-	verify_d(&F[-2][-2][0],test_F,(N1+4)*(N2+4)*NPR); // for testing dq,pr,F 
-	//printf("FINISHED TESING F... \n"); fflush(stdout);
-	//printf("TESTING ndt... \n"); fflush(stdout);
-	verify_d(&ndt,&test_ndt,1); // for testing dq,pr,F 
-	//printf("FINISHED TESING ndt... \n"); fflush(stdout);
-	free(test_F);
-	free(test_dq);
-	free(test_pr);
-
-
-#endif //TIMING_COMPARISON
-
-	return(ndt) ;
-}
 
 

@@ -69,11 +69,7 @@ int main(int argc,char *argv[])
 	  init() ;
 	} 
 
-	init_mpi_omp(argc, argv); //TODO
-	//printf("num mpi ranks: %d\n",numranks);
-
-	//printf("argc: %d", argc);
-        //printf("thread test... %d\n", atoi(argv[1]));
+	init_mpi_omp(argc, argv);
 
 	/* do initial diagnostics */
 	diag(INIT_OUT) ;
