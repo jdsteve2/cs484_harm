@@ -290,16 +290,28 @@ void init_mpi(int *argc, char*** argv)
   halo_count = 0;
 
   // Custom types for printing restart files
-  MPI_Type_contiguous(NPR*CHARSPERNUM, MPI_CHAR, &array_as_string);
-  MPI_Type_commit(&array_as_string);
-
   int globalsizes[2] = {(N1+4)*NumRows, (N2+4)*NumCols};
   int localsizes[2]  = {N1+4, N2+4};
   int starts[2]      = {(N1+4)*RowRank, (N2+4)*ColRank};
   int order          = MPI_ORDER_C;
+
+  MPI_Type_contiguous(NPR*CHARSPERNUM, MPI_CHAR, &array_as_string);
+  MPI_Type_commit(&array_as_string);
   MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order,
                            array_as_string, &local_array);
   MPI_Type_commit(&local_array);
+
+  // Custom types for creating images
+  globalsizes[0] = GlobalN1; globalsizes[1] = GlobalN2;
+  localsizes[0] = N1; localsizes[1] = N2;
+  starts[0] = N1*RowRank; starts[1] = N2*ColRank;
+  order = MPI_ORDER_FORTRAN;
+
+  MPI_Type_contiguous(3, MPI_CHAR, &rgb);
+  MPI_Type_commit(&rgb);
+  MPI_Type_create_subarray(2, globalsizes, localsizes, starts, order, rgb,
+      &color_array);
+  MPI_Type_commit(&color_array);
 }
 
 /*****************************************************************
@@ -388,6 +400,11 @@ void clean_up()
     Free_2D(a_gcon);
     Free_2D(a_gcov);
     Free_2D(a_gdet);
+
+    MPI_Type_free(&array_as_string);
+    MPI_Type_free(&local_array);
+    MPI_Type_free(&rgb);
+    MPI_Type_free(&color_array);
 
     MPI_Finalize();
 }

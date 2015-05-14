@@ -98,11 +98,14 @@
 #define FMT_DBL_OUT "%28.18e"
 #define FMT_INT_OUT "%10d"
 
-/* Restart file stuff */
+/* MPI I/O formats and header sizes */
+#define RGB_SIZE 3
 #define CHARSPERNUM 29
-#define FMT_RST "%28.18e "
-#define ENDFMT_RST "%28.18e\n"
-#define SEEK_DISP (454)
+#define FMT_FILE "%28.18e "
+#define ENDFMT_FILE "%28.18e\n"
+#define DMP_HEADER_DISP (567)
+#define RST_HEADER_DISP (455)
+#define IMG_HEADER_DISP (50)
 
 /*************************************************************************
     MNEMONICS SECTION 
@@ -313,6 +316,8 @@ extern MPI_Datatype d_col_type, d_row_type;
 extern MPI_Datatype i_col_type, i_row_type;
 extern MPI_Datatype array_as_string;
 extern MPI_Datatype local_array;
+extern MPI_Datatype rgb;
+extern MPI_Datatype color_array;
 
 extern int halo_count;
 

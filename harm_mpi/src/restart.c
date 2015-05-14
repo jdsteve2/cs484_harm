@@ -72,18 +72,18 @@ void restart_write()
   *************************************************************/
   if (WorldRank == 0) {
     if (rdump_cnt%2 == 0) {
-      fp = fopen("dumps/hrdump0","wt") ;
+      fp = fopen("dumps/rdump0","wt") ;
       sprintf(filename, "dumps/rdump0");
-      fprintf(stderr,"RESTART  file=dumps/rdump0\n") ;
+      fprintf(stderr, "RESTART  file=dumps/rdump0\n");
     }
     else {
-      fp = fopen("dumps/hrdump1","wt") ;
+      fp = fopen("dumps/rdump1","wt") ;
       sprintf(filename, "dumps/rdump1");
-      fprintf(stderr,"RESTART file=dumps/rdump1\n") ;
+      fprintf(stderr, "RESTART file=dumps/rdump1\n");
     }
 
     if (fp == NULL) {
-      fprintf(stderr,"Cannot open restart file\n") ;
+      fprintf(stderr, "Cannot open restart file\n");
       sprintf(filename, "");
     } else {
       fprintf(fp, FMT_INT_OUT, GlobalN1 );
@@ -119,39 +119,31 @@ void restart_write()
       exit(2);
   }
 
-  /* convert the data to strings so the outputted file is in human readable format */
-  char *data_as_text = (char *) malloc(CHARSPERNUM*NPR*(N1+4)*(N2+4)*sizeof(char));
+  /* convert data to a string */
+  char *data_as_text = (char *) malloc(
+      CHARSPERNUM * NPR * (N1 + 4) * (N2 + 4) * sizeof(char));
   int count = 0;
   ZSLOOP (-2, N1+1, -2, N2+1) {
     for (k = 0; k < NPR - 1; k++) {
-      sprintf(&data_as_text[count*CHARSPERNUM], FMT_RST, p[i][j][k]);
+      sprintf(&data_as_text[count*CHARSPERNUM], FMT_FILE, p[i][j][k]);
       count++;
     }
 
-    sprintf(&data_as_text[count*CHARSPERNUM], ENDFMT_RST, p[i][j][NPR-1]);
+    sprintf(&data_as_text[count*CHARSPERNUM], ENDFMT_FILE, p[i][j][NPR-1]);
     count++;
   }
 
   /* open the file, set the view, write data and close the file */
-  MPI_File_open(MPI_COMM_WORLD, filename,
-                MPI_MODE_CREATE | MPI_MODE_WRONLY,
-                MPI_INFO_NULL, &file);
-
-  MPI_File_set_view(file, 0, array_as_string, local_array, "native", MPI_INFO_NULL);
-  MPI_File_write_all(file, data_as_text, (N1+4)*(N2+4), array_as_string, &status);
+  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY, MPI_INFO_NULL,
+      &file);
+  MPI_File_set_view(file, RST_HEADER_DISP, array_as_string, local_array,
+      "native", MPI_INFO_NULL);
+  MPI_File_write_all(file, data_as_text, (N1 + 4) * (N2 + 4), array_as_string,
+      &status);
   MPI_File_close(&file);
 
   /* clean up */
   free(data_as_text);
-
-  /*************************************************************
-	  Write the body of the restart file:
-  *************************************************************/
-//  ZSLOOP(-2,N1+1,-2,N2+1) {
-//    PLOOP fprintf(fp, FMT_DBL_OUT, p[i][j][k]); 
-//    fprintf(fp, "\n"); 
-//  }
-
   rdump_cnt++;
   return;
 }
@@ -246,7 +238,8 @@ int restart_init()
   //lim = VANL ;
   //tf = 4000. ;
 
-  fprintf(stderr,"done with restart init.\n") ;
+  if (WorldRank == 0)
+    fprintf(stderr,"done with restart init.\n") ;
 
   /* done! */
   return(1) ;
@@ -262,7 +255,6 @@ void restart_read(char *filename)
 {
   FILE *fp;
   int idum, i, j, k ;
-  char hfilename[100];
 
   MPI_File file;
   MPI_Status status;
@@ -270,25 +262,16 @@ void restart_read(char *filename)
   /*************************************************************
 	  Everyone can simultaneously read the restart file:
   *************************************************************/
+  fp = fopen(filename, "r");
 
-  /* get the name of the header file */
-  i = 0;
-  j = 0;
-  while (filename[j] != '\0') {
-    if (i == 6) // just after the '/'
-      hfilename[i++] = 'h';
-    hfilename[i++] = filename[j++];
-  }
-  fp = fopen(hfilename, "r");
-
-  fscanf(fp, "%d", &idum  );
-  if(idum != GlobalN1) {
-    fprintf(stderr,"error reading restart file; N1 differs\n") ;
+  fscanf(fp, "%d", &idum);
+  if (idum != GlobalN1) {
+    fprintf(stderr, "error reading restart file; N1 differs\n");
     exit(3);
   }
-  fscanf(fp, "%d", &idum  );
-  if(idum != GlobalN2) {
-    fprintf(stderr,"error reading restart file; N2 differs\n") ;
+  fscanf(fp, "%d", &idum);
+  if (idum != GlobalN2) {
+    fprintf(stderr, "error reading restart file; N2 differs\n");
     exit(4);
   }
 
@@ -316,10 +299,14 @@ void restart_read(char *filename)
   fclose(fp);
 
   /* open the file, set the view, read the contents and close the file */
-  char *data_as_text = (char *) malloc(CHARSPERNUM*NPR*(N1+4)*(N2+4)*sizeof(char));
-  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &file);
-  MPI_File_set_view(file, 0, array_as_string, local_array, "native", MPI_INFO_NULL);
-  MPI_File_read_all(file, data_as_text, (N1+4)*(N2+4), array_as_string, &status);
+  char *data_as_text = (char *) malloc(
+      CHARSPERNUM * NPR * (N1 + 4) * (N2 + 4) * sizeof(char));
+  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL,
+      &file);
+  MPI_File_set_view(file, RST_HEADER_DISP, array_as_string, local_array,
+      "native", MPI_INFO_NULL);
+  MPI_File_read_all(file, data_as_text, (N1 + 4) * (N2 + 4), array_as_string,
+      &status);
   MPI_File_close(&file);
 
   /* convert strings to doubles */
@@ -332,12 +319,6 @@ void restart_read(char *filename)
   }
 
   free(data_as_text);
-
-  /*************************************************************
-	  READ the body of the restart file:
-  *************************************************************/
-//  ZSLOOP(-2,N1+1,-2,N2+1)  PLOOP fscanf(fp, "%lf", &(p[i][j][k]));
-
   return ;
 }
 
