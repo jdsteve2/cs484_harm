@@ -183,5 +183,7 @@ MPI_Datatype d_col_type, d_row_type;
 MPI_Datatype i_col_type, i_row_type;
 MPI_Datatype array_as_string;
 MPI_Datatype local_array;
+MPI_Datatype rgb;
+MPI_Datatype color_array;
 
 int halo_count;

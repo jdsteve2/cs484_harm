@@ -213,9 +213,7 @@ int call_code ;
 	   call_code == INIT_OUT ||
 	   call_code == FINAL_OUT) {
 
-        // TODO: MPI Concurrent Write Image
-//		image_all( image_cnt );
-
+	  image_all(image_cnt);
 		image_cnt++ ;
 	}
 }

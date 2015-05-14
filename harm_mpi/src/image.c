@@ -47,6 +47,7 @@
 
 
 /* Decide whether to use raw R8 (0) or PPM (1) image formats */
+/* NOTE: PLEASE DON'T USE R8 FOR NOW AS IT HASN'T BEEN PORTED TO MPI */
 #define MAKE_PPM_IMAGE (1)
 
 #if( MAKE_PPM_IMAGE ) 
@@ -88,7 +89,7 @@ void image_ppm(double *f, char *fname);
   image_all(): 
   -----------
    -- Main driver for generating "image" or snapshots of any desired quantity;
-   -- This is esponsible for calculating the outputted quantities and setting 
+   -- This is responsible for calculating the outputted quantities and setting
        the names of the images
    -- This is the only routine in this file that a user should modify, all 
       other routines merely control how the images are created. 
@@ -147,7 +148,7 @@ void image_all( int image_count )
         -- calculate only the non-log version here
   ************************************************************************/
   k = 0 ;
-  IMAGELOOP { 
+  IMAGELOOP {
     get_geometry(i,j,CENT,&geom) ;
     if( gamma_calc(p[i][j],&geom,&gamma) ) { gamma = 1.; }
     
@@ -274,44 +275,72 @@ void image_r8(double *f, char *fname)
 void image_ppm(double *f, char *fname)
 {
   int i,j, icolor ;
-  double iq,liq,scale,max,min,f_ncolors;
+  double iq, liq, scale, f_ncolors;
+  double lmax, lmin;
+  double gmax, gmin;
+  int fail = 0;
   FILE *fp;
+
+  MPI_File file;
+  MPI_Status status;
 
   f_ncolors = (double) ppm_ncolors;
 
-  if( (fp = fopen(fname,"w")) == NULL ) {
-    fflush(stderr);
-    fprintf(stderr,"image(): Cannot open %s !! \n",fname);
-    fflush(stderr);
+  if (WorldRank == 0) {
+    if ((fp = fopen(fname, "w")) == NULL ) {
+      fprintf(stderr, "image(): Cannot open %s !!\n", fname);
+      fail = 1;
+    }
+  }
+
+  MPI_Bcast(&fail, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  if (fail)
     return;
+
+  /* mapping is in ppm_ncolors steps lmax and lmin */
+  lmax = lmin = f[0];
+  for( i = 0 ; i < N1*N2; i++ ) { 
+    if(f[i] > lmax) lmax = f[i] ;
+    if(f[i] < lmin) lmin = f[i] ;
   }
 
-  /*  mapping is in ppm_ncolors steps lmax and lmin */
-  max = min = f[0];
-  for( i = 0 ; i < N1*N2; i++ ) { 
-    if(f[i] > max) max = f[i] ;
-    if(f[i] < min) min = f[i] ;
+  /* need global minimum and maximum */
+  MPI_Allreduce(&lmin, &gmin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(&lmax, &gmax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  scale = f_ncolors/(gmax - gmin);
+
+  /* Rank 0 writes header information: */
+  if (WorldRank == 0) {
+    fprintf(fp, "P6\n#  min=%g  , max=%g \n%d %d\n%d\n", gmin, gmax,
+        GlobalN1, GlobalN2, ppm_ncolors);
+    fclose(fp);
   }
 
-  scale = f_ncolors/(max - min) ;
-
-  /* Header information: */
-  fprintf(fp, "P6\n#  min=%g  , max=%g \n%d %d\n%d\n", min, max, N1, N2, ppm_ncolors );
-  fflush(fp);
-
-  for( i = 0 ; i < N1*N2; i++ ) { 
+  /* convert data to a string */
+  char *data_as_text = (char *) malloc(RGB_SIZE * N1 * N2 * sizeof(char));
+  int count = 0;
+  for (i = 0 ; i < N1*N2; i++) {
     iq = f[i];
-    liq = scale*(iq - min) ;
+    liq = scale*(iq - gmin) ;
     icolor = (int) liq;
     if( icolor > ppm_ncolors ) { icolor = ppm_ncolors; }
-    if( icolor < 0           ) { icolor = 0;           } 
-    fputc(color_map[RED  ][icolor],fp);    
-    fputc(color_map[GREEN][icolor],fp);    
-    fputc(color_map[BLUE ][icolor],fp);
+    if( icolor < 0           ) { icolor = 0;           }
+
+    sprintf(&data_as_text[count++], "%c", color_map[RED  ][icolor]);
+    sprintf(&data_as_text[count++], "%c", color_map[GREEN][icolor]);
+    sprintf(&data_as_text[count++], "%c", color_map[BLUE ][icolor]);
   }
 
-  fclose(fp);
+  /* open the file, set the view, write data and close the file */
+  MPI_File_open(MPI_COMM_WORLD, fname, MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
+  MPI_File_set_view(file, IMG_HEADER_DISP, rgb, color_array, "native",
+      MPI_INFO_NULL);
+  MPI_File_write_all(file, data_as_text, N1 * N2, rgb, &status);
+  MPI_File_close(&file);
 
+  /* clean up */
+  free(data_as_text);
   return;
 }
 
@@ -341,7 +370,10 @@ void get_color_map(void)
   enum PPM_type { ppm_plain, ppm_raw };
   enum PPM_type ppm_type, ppm_body;
 
-  fprintf(stdout,"Starting get_color_map().... \n"); fflush(stdout);
+  if (WorldRank == 0) {
+    fprintf(stdout,"Starting get_color_map().... \n");
+    fflush(stdout);
+  }
   
   if( (fp = fopen("map.ppm","r")) == NULL ) {
     fflush(stderr);
@@ -464,7 +496,8 @@ void get_color_map(void)
   /********************************************************************************
     test get_color_map():  Make sure that testmap.ppm looks identical to your map.ppm file. 
   ********************************************************************************/
-  if( (fp = fopen("testmap.ppm","w")) == NULL ) {
+  // Can probably comment this out - no need for testing... I think
+  /*if( (fp = fopen("testmap.ppm","w")) == NULL ) {
     exit(1);
   }
   fprintf(fp,"P6\n%d %d\n%d\n",ppm_width, ppm_height,ppm_ncolors);  fflush(fp);
@@ -473,10 +506,12 @@ void get_color_map(void)
     fputc(color_map[GREEN][i],fp);
     fputc(color_map[BLUE ][i],fp);
   }
-  fclose(fp);
+  fclose(fp);*/
 
-
-  fprintf(stdout,"Ending get_color_map().... \n"); fflush(stdout);
+  if (WorldRank == 0) {
+    fprintf(stdout, "Ending get_color_map().... \n");
+    fflush(stdout);
+  }
 
   return;
 }

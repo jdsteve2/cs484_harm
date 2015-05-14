@@ -52,7 +52,6 @@ void dump(char *filename)
 	double r,th,vmin,vmax ;
 	struct of_geom geom ;
 	struct of_state q ;
-	char hfilename[100];
 	FILE *fp;
 
 	MPI_File file;
@@ -65,15 +64,7 @@ void dump(char *filename)
 	***************************************************************/
 
 	if (WorldRank == 0) {
-	  /* get the name of the header file */
-	  i = 0;
-	  j = 0;
-	  while (filename[j] != '\0') {
-	    if (i == 6) // just after the '/'
-	      hfilename[i++] = 'h';
-	    hfilename[i++] = filename[j++];
-	  }
-	  fp = fopen(hfilename, "w");
+	  fp = fopen(filename, "w");
 
     fprintf(fp, FMT_DBL_OUT, t        );
     fprintf(fp, FMT_INT_OUT, GlobalN1 );
@@ -122,20 +113,13 @@ void dump(char *filename)
 		coord(i, j, CENT, X);
 		bl_coord(X, &r, &th);
 
-		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, X[1]);
-		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, X[2]);
-		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, r);
-		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, th);
-		PLOOP sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, p[i][j][k]);
-
-//		fprintf(fp, FMT_DBL_OUT, X[1]       );
-//		fprintf(fp, FMT_DBL_OUT, X[2]       );
-//		fprintf(fp, FMT_DBL_OUT, r          );
-//		fprintf(fp, FMT_DBL_OUT, th         );
-//		PLOOP fprintf(fp, FMT_DBL_OUT, p[i][j][k] );
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, X[1]);
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, X[2]);
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, r);
+		sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, th);
+		PLOOP sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, p[i][j][k]);
 		
-                /* divb flux-ct defn; corner-centered.  Use
-		   only interior corners */
+    /* divb flux-ct defn; corner-centered. Use only interior corners */
 		if(((RowRank*N1 + i) > 0) && ((ColRank*N2 + j) > 0) &&
 		   ((RowRank*N1 + i) < GlobalN1) && ((ColRank*N2 + j) < GlobalN2)) {
 			divb = fabs( 0.5*(
@@ -156,42 +140,29 @@ void dump(char *filename)
 		}
 
 		if (!failed)
-		  sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, divb);
+		  sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, divb);
 		else
-		  sprintf(&data_as_text[count++*CHARSPERNUM], ENDFMT_RST, divb);
-
-//		fprintf(fp, FMT_DBL_OUT, divb     );
+		  sprintf(&data_as_text[count++*CHARSPERNUM], ENDFMT_FILE, divb);
 
 		if(!failed) {
 			get_geometry(i, j, CENT, &geom) ;
 			get_state(p[i][j], &geom, &q) ;
 
-			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.ucon[k]);
-			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.ucov[k]);
-			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.bcon[k]);
-			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, q.bcov[k]);
-//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.ucon[k]) ;
-//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.ucov[k]) ;
-//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.bcon[k]) ;
-//			for(k=0;k<NDIM;k++) fprintf(fp,FMT_DBL_OUT,q.bcov[k]) ;
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, q.ucon[k]);
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, q.ucov[k]);
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, q.bcon[k]);
+			for(k=0;k<NDIM;k++) sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, q.bcov[k]);
 
 			vchar(p[i][j], &q, &geom, 1, &vmax, &vmin);
-			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmin);
-			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmax);
-//			fprintf(fp, FMT_DBL_OUT, vmin );
-//			fprintf(fp, FMT_DBL_OUT, vmax );
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, vmin);
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, vmax);
 
 			vchar(p[i][j], &q, &geom, 2, &vmax, &vmin);
-			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmin);
-			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_RST, vmax);
-//			fprintf(fp, FMT_DBL_OUT, vmin );
-//			fprintf(fp, FMT_DBL_OUT, vmax );
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, vmin);
+			sprintf(&data_as_text[count++*CHARSPERNUM], FMT_FILE, vmax);
 
-			sprintf(&data_as_text[count++*CHARSPERNUM], ENDFMT_RST, geom.g);
-//			fprintf(fp, FMT_DBL_OUT, geom.g );
+			sprintf(&data_as_text[count++*CHARSPERNUM], ENDFMT_FILE, geom.g);
 		}
-
-//		fprintf(fp,"\n") ;
 	}
 
 	/*
@@ -207,7 +178,7 @@ void dump(char *filename)
   MPI_Type_contiguous(num*CHARSPERNUM, MPI_CHAR, &data_as_string);
   MPI_Type_commit(&data_as_string);
 
-  /* need a new type to set file view since we're looking at N1xN2 elements */
+  /* need a corresponding file type */
   int globalsizes[2] = {GlobalN1, GlobalN2};
   int localsizes[2]  = {N1, N2};
   int starts[2]      = {N1*RowRank, N2*ColRank};
@@ -218,12 +189,11 @@ void dump(char *filename)
   MPI_Type_commit(&dump_array);
 
 	/* open the file, set the view, write data and close the file */
-  MPI_File_open(MPI_COMM_WORLD, filename,
-                MPI_MODE_CREATE | MPI_MODE_WRONLY,
-                MPI_INFO_NULL, &file);
-
-  MPI_File_set_view(file, 0, data_as_string, dump_array, "native", MPI_INFO_NULL);
-  MPI_File_write_all(file, data_as_text, N1*N2, data_as_string, &status);
+  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY, MPI_INFO_NULL,
+      &file);
+  MPI_File_set_view(file, DMP_HEADER_DISP, data_as_string, dump_array, "native",
+      MPI_INFO_NULL);
+  MPI_File_write_all(file, data_as_text, N1 * N2, data_as_string, &status);
   MPI_File_close(&file);
 
   /* clean up */
