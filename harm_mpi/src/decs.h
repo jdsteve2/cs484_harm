@@ -105,7 +105,6 @@
 #define ENDFMT_FILE "%28.18e\n"
 #define DMP_HEADER_DISP (567)
 #define RST_HEADER_DISP (455)
-#define IMG_HEADER_DISP (50)
 
 /*************************************************************************
     MNEMONICS SECTION 

@@ -278,6 +278,7 @@ void image_ppm(double *f, char *fname)
   double iq, liq, scale, f_ncolors;
   double lmax, lmin;
   double gmax, gmin;
+  int offset;
   int fail = 0;
   FILE *fp;
 
@@ -312,10 +313,13 @@ void image_ppm(double *f, char *fname)
 
   /* Rank 0 writes header information: */
   if (WorldRank == 0) {
-    fprintf(fp, "P6\n#  min=%g  , max=%g \n%d %d\n%d\n", gmin, gmax,
-        GlobalN1, GlobalN2, ppm_ncolors);
+    fprintf(fp, "P6\n#  min=%g  , max=%g \n%d %d\n%d\n%n", gmin, gmax,
+        GlobalN1, GlobalN2, ppm_ncolors, &offset);
     fclose(fp);
   }
+
+  /* file offset information is required to set the view */
+  MPI_Bcast(&offset, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   /* convert data to a string */
   char *data_as_text = (char *) malloc(RGB_SIZE * N1 * N2 * sizeof(char));
@@ -334,8 +338,7 @@ void image_ppm(double *f, char *fname)
 
   /* open the file, set the view, write data and close the file */
   MPI_File_open(MPI_COMM_WORLD, fname, MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
-  MPI_File_set_view(file, IMG_HEADER_DISP, rgb, color_array, "native",
-      MPI_INFO_NULL);
+  MPI_File_set_view(file, offset, rgb, color_array, "native", MPI_INFO_NULL);
   MPI_File_write_all(file, data_as_text, N1 * N2, rgb, &status);
   MPI_File_close(&file);
 
